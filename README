@@ -1,0 +1,7 @@
+Run "make" to create h5mdplugin.so
+This shared object can than be loaded by VMD.
+
+For example you may include the path to the .so file in your .vmdrc with the following command:
+		vmd_plugin_scandirectory /PATH_TO_SO_DIRECTORY/ *.so
+
+Another way to load the plugin is to move the .so file into the plugin folder of VMD
