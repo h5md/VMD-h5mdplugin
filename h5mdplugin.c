@@ -20,6 +20,20 @@
 #include "molfile_plugin.h"
 #include "hdf5.h"
 
+//element symbols
+static const char *element_symbols[] = { 
+    "X",  "H",  "He", "Li", "Be", "B",  "C",  "N",  "O",  "F",  "Ne",
+    "Na", "Mg", "Al", "Si", "P" , "S",  "Cl", "Ar", "K",  "Ca", "Sc",
+    "Ti", "V",  "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", 
+    "As", "Se", "Br", "Kr", "Rb", "Sr", "Y",  "Zr", "Nb", "Mo", "Tc",
+    "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I",  "Xe",
+    "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb",
+    "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W",  "Re", "Os",
+    "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr",
+    "Ra", "Ac", "Th", "Pa", "U",  "Np", "Pu", "Am", "Cm", "Bk", "Cf",
+    "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt",
+    "Ds", "Rg"
+};
 
 typedef struct {
 	int ntime;
@@ -33,17 +47,6 @@ typedef struct {
 
 int reads = 0;
 int current_time = 0;
-
-static void get_xyz(void *mydata, int atom_nr, int time_i,
-		double xyz_array[3]) {
-	h5mddata *data = (h5mddata *) mydata;
-	double data_out[data->ntime][data->natoms][data->nspacedims];
-	H5Dread(data->dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
-
-	xyz_array[0] = data_out[time_i][atom_nr][0];
-	xyz_array[1] = data_out[time_i][atom_nr][1];
-	xyz_array[2] = data_out[time_i][atom_nr][2];
-}
 
 static void *open_h5md_read(const char *filename, const char *filetype, int *natoms) {
 	h5mddata *data;
@@ -59,6 +62,7 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 	data->file_name = filename;
 	data->ntime = dims_out[0];
 	data->natoms = dims_out[1];
+	data->file_id = file_id;
 	*natoms = data->natoms;
 	data->nspacedims = dims_out[2];
 	data->dataset_id=dataset_id;
@@ -68,26 +72,25 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 }
 
 static int read_h5md_structure(void *mydata, int *optflags,molfile_atom_t *atoms) {
-	/////////////////////// TODO READ SPECIES INFO (specification needed)
 	molfile_atom_t *atom;
 	h5mddata *data = (h5mddata *) mydata;
 
 	*optflags = MOLFILE_ATOMICNUMBER | MOLFILE_MASS | MOLFILE_RADIUS;
-
-	// Read species information from dataset (currently it uses data->dataset_id which is associated with trajectory/atoms/position/value which is of course not according to the specification)
-	//double data_out[data->ntime][data->natoms][data->nspacedims];
-	//H5Dread(data->dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
-
+	double data_out[data->natoms];
+	hid_t dataset_species_id = H5Dopen(data->file_id, "/trajectory/atoms/species/value",H5P_DEFAULT);
+	herr_t status= H5Dread(dataset_species_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
 	for (int i = 0; i < data->natoms; i++) {
 		atom = atoms + i;
-		//int idx = (int) data_out[20][i][0];
-		int idx =10;
+		unsigned int idx = (unsigned int) data_out[i];
+		idx=idx%112;
 		char const dummy_label[16];
-		const char *pdummy_label=dummy_label;
-		char dummy_name[16]="XXX";
-
-
-		strncpy(dummy_name, pdummy_label, sizeof(dummy_name));
+		if(status==0){
+			//use species information if existing
+			strncpy(atom->name,element_symbols[idx],sizeof(*element_symbols[idx]));
+		}else{
+			//set default color red (oxygen, 8)
+			strncpy(atom->name,element_symbols[8],sizeof(*element_symbols[8]));		
+		}
 		atom->atomicnumber = idx;
 		float dummy_mass=1.0;
 		atom->mass = dummy_mass;
@@ -102,6 +105,17 @@ static int read_h5md_structure(void *mydata, int *optflags,molfile_atom_t *atoms
 	}
 
 	return MOLFILE_SUCCESS;
+}
+
+static void get_xyz(void *mydata, int atom_nr, int time_i,
+		double xyz_array[3]) {
+	h5mddata *data = (h5mddata *) mydata;
+	double data_out[data->ntime][data->natoms][data->nspacedims];
+	H5Dread(data->dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+
+	xyz_array[0] = data_out[time_i][atom_nr][0];
+	xyz_array[1] = data_out[time_i][atom_nr][1];
+	xyz_array[2] = data_out[time_i][atom_nr][2];
 }
 
 static int read_h5md_timestep(void *mydata, int natoms, molfile_timestep_t *ts) {
@@ -137,7 +151,7 @@ static int read_h5md_timestep(void *mydata, int natoms, molfile_timestep_t *ts) 
 
 static void close_h5md_read(void *mydata) {
 	 h5mddata *data = (h5mddata *)mydata;
-	 H5Fclose(data->dataset_id);
+	 H5Fclose(data->file_id);
 	 free(data);
 }
 
