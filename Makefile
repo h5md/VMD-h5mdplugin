@@ -21,7 +21,7 @@ CPPFLAGS=$(VMDCPPFLAGS) $(HDF5CPPFLAGS)
 LDFLAGS=$(HDF5LDFLAGS)
 LDLIBS=$(HDF5LIBS)
 SHLD=$(CC)
-SHLDFLAGS=-shared --no-undefined $(LDFLAGS)
+SHLDFLAGS=-shared -Wl,--no-undefined $(LDFLAGS)
 
 all: h5mdtest h5mdplugin.so
 
