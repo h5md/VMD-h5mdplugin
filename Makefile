@@ -2,7 +2,7 @@
 VMDDIR=/usr/local/lib/vmd
 
 # Where the HDF5 library is installed
-HDF5LDFLAGS=-L/usr/lib64
+HDF5LDFLAGS=/usr/lib64
 # Where the HDF5 include files are installed
 HDF5INCLUDES=/usr/include
 
@@ -28,7 +28,7 @@ all: h5mdtest h5mdplugin.so
 h5mdtest: h5mdplugin.o
 
 h5mdplugin.so: h5mdplugin.o
-	$(SHLD) $(CFLAGS) $(SHLDFLAGS) $(LDLIBS) $< -o h5mdplugin.so
+	$(SHLD) $(CFLAGS) $(SHLDFLAGS) $(LDLIBS) $< -o h5mdplugin.so 
 
 clean:
 	-rm h5mdplugin.o
