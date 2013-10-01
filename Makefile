@@ -2,9 +2,9 @@
 VMDDIR=/usr/local/lib/vmd
 
 # Where the HDF5 library is installed
-HDF5LDFLAGS=/usr/lib64
+HDF5LDFLAGS=-L/usr/lib64
 # Where the HDF5 include files are installed
-HDF5INCLUDES=/usr/include
+HDF5CPPFLAGS=-I/usr/include
 
 # Which libraries to use
 HDF5LIBS=-lhdf5_cpp -lhdf5
@@ -12,16 +12,16 @@ HDF5LIBS=-lhdf5_cpp -lhdf5
 # Location of the VMD include files vmdplugin.h and molfile_plugin.h.
 # Typically, these files can be found in the subdir 
 # plugins/include of the VMD installation directory.
-VMDINCLUDES=$(VMDDIR)/plugins/include 
+VMDCPPFLAGS=-I$(VMDDIR)/plugins/include 
 
 CC=gcc
 CFLAGS=-Wall -std=c99 -g -O0 -pedantic -fPIC
 CXXFLAGS=$(CFLAGS) -g
-CPPFLAGS=-I$(VMDINCLUDES) -I$(HDF5INCLUDES)
-LDFLAGS=-L$(HDF5LDFLAGS)
+CPPFLAGS=$(VMDCPPFLAGS) $(HDF5CPPFLAGS)
+LDFLAGS=$(HDF5LDFLAGS)
 LDLIBS=$(HDF5LIBS)
 SHLD=$(CC)
-SHLDFLAGS=-shared $(LDFLAGS)
+SHLDFLAGS=-shared -Wl,--no-undefined $(LDFLAGS)
 
 all: h5mdtest h5mdplugin.so
 
