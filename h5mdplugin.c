@@ -515,8 +515,16 @@ int read_h5md_structure_vmd_structure(void *mydata, int *optflags,molfile_atom_t
 
 	}
 
+	free(*data_name);
 	free(data_name);
+	free(*data_type);
 	free(data_type);
+	free(*data_segid);
+	free(data_segid);
+	free(*data_resname);
+	free(data_resname);
+	free(*data_chain);
+	free(data_chain);
 
 	return MOLFILE_SUCCESS;
 }
@@ -560,7 +568,7 @@ static void get_xyz(void *mydata, int atom_nr, int time_i, double xyz_array[3]) 
 	//OUT: xyz_array[3]
 	h5mddata *data = (h5mddata *) mydata;
 
-	//FIXME, do not read dataset again and again
+	//FIXME, do not read dataset again and again -> use malloc
 	double data_xyz[data->ntime][data->natoms][data->nspacedims];
 	H5Dread(data->dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_xyz);
 	xyz_array[0] = data_xyz[time_i][atom_nr][0];
