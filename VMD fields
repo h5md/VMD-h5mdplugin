@@ -1,0 +1,16 @@
+/* these fields absolutely must be set or initialized to empty */
+	   char name[16]; -> per species    
+	   char type[16]; -> per species     
+	   char resname[8]; -> per resid   
+	   int resid;	-> per atom          
+	   char segid[8]; -> per atom     
+	   char chain[2]; -> per resid     
+/* rest are optional; use optflags to specify what's present   */
+	   char altloc[2];   
+	   char insertion[2];  
+	   float occupancy;    
+	   float bfactor;      
+	   float mass; -> per species        
+	   float charge; -> per atom      
+	   float radius; -> per species       
+	   int atomicnumber; -> per species  
