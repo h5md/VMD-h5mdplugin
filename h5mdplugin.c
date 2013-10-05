@@ -37,6 +37,21 @@ static const char *element_symbols[] = {
     "Ds", "Rg"
 };
 
+const char default_name[16]="O";
+const char default_type[16]="O";
+const char default_resname[8]="";
+const int default_resid= 1;
+const char default_segid[8]= "";
+const char default_chain[2]= "";
+const char default_altloc[2]= "";
+const char default_insertion[2]= "";
+const const float default_occupancy= 1.0;
+const float default_bfactor= 1.0; 
+const float default_mass= 1.0;
+const float default_charge= 0.0;
+const float default_radius= 0.5;
+const int default_atomicnumber= 1;
+
 typedef struct {
 	int nspacedims;
 	molfile_atom_t *atomlist;
@@ -50,23 +65,12 @@ typedef struct {
 	int *nbonds;
 	int *bond_from;
 	int *bond_to;
+	//positions
+	double ***data_xyz;
 } h5mddata;
 
-char default_name[16]="O";
-char default_type[16]="O";
-char default_resname[8]="";
-int default_resid= 1;
-char default_segid[8]= "";
-char default_chain[2]= "";
-char default_altloc[2]= "";
-char default_insertion[2]= "";
-float default_occupancy= 1.0;
-float default_bfactor= 1.0; 
-float default_mass= 1.0;
-float default_charge= 0.0;
-float default_radius= 0.5;
-int default_atomicnumber= 1;
-
+//global non constant variables
+int position_already_read =-1;
 int reads = 0;
 int current_time = 0;
 
@@ -563,25 +567,54 @@ int read_h5md_structure_no_vmd_structure(void *mydata, int *optflags,molfile_ato
 }
 
 
-static void get_xyz(void *mydata, int atom_nr, int time_i, double xyz_array[3]) {
+static void get_xyz(void *mydata, int atom_nr, int time_i, double xyz_array[3], double*** data_xyz) {
 	//IN: *mydata, atom_nr, time_i
 	//OUT: xyz_array[3]
 	h5mddata *data = (h5mddata *) mydata;
 
-	//FIXME, do not read dataset again and again -> use malloc
-	double data_xyz[data->ntime][data->natoms][data->nspacedims];
-	H5Dread(data->dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_xyz);
 	xyz_array[0] = data_xyz[time_i][atom_nr][0];
 	xyz_array[1] = data_xyz[time_i][atom_nr][1];
 	xyz_array[2] = data_xyz[time_i][atom_nr][2];
 
 }
 
+
+void read_position(h5mddata *data){
+	//read position data to data_xyz_read
+	double data_xyz_read[data->ntime][data->natoms][data->nspacedims];
+	H5Dread(data->dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_xyz_read[0]);
+	//allocate memory for data_xyz
+	double *** data_xyz = (double ***)malloc(data->ntime*sizeof(double**));
+
+        for (int i = 0; i< data->ntime; i++) {
+        	data_xyz[i] = (double **) malloc(data->natoms*sizeof(double *));
+        	for (int j = 0; j < data->natoms; j++) {
+         		data_xyz[i][j] = (double *)malloc(3*sizeof(double));
+        	}
+        }
+	//copy data of data_xyz_read to data_xyz on heap
+        for (int i = 0; i< data->ntime; i++) {
+        	for (int j = 0; j < data->natoms; j++) {
+         		data_xyz[i][j][0]=data_xyz_read[i][j][0];
+			data_xyz[i][j][1]=data_xyz_read[i][j][1];
+			data_xyz[i][j][2]=data_xyz_read[i][j][2];
+        	}
+        }
+
+	data->data_xyz=data_xyz;
+}
+
 static int read_h5md_timestep(void *mydata, int natoms, molfile_timestep_t *ts) {
 	float x, y, z;
 
 	h5mddata *data = (h5mddata *) mydata;
-
+	
+	if(position_already_read<0){
+		read_position(data);
+		position_already_read=1;
+	}
+	double ***data_xyz=data->data_xyz;
+	
 	/* read the coordinates */
 	unsigned int ntime = data->ntime;
 	if (current_time >= ntime - 1) {
@@ -592,7 +625,7 @@ static int read_h5md_timestep(void *mydata, int natoms, molfile_timestep_t *ts) 
 		current_time = reads / natoms;
 		reads += 1;
 		double xyz_array[3];
-		get_xyz(data, i, current_time, xyz_array);
+		get_xyz(data, i, current_time, xyz_array,data_xyz);
 		x = xyz_array[0];
 		y = xyz_array[1];
 		z = xyz_array[2];
@@ -605,6 +638,7 @@ static int read_h5md_timestep(void *mydata, int natoms, molfile_timestep_t *ts) 
 			break;
 		}
 	}
+
 	return MOLFILE_SUCCESS;
 }
 
@@ -665,11 +699,22 @@ static void close_h5md_read(void *mydata) {
 	H5Fclose(data->file_id);
 	free(data->bond_from);
 	free(data->bond_to);
+
+	//free data_xyz
+	for(int i=0;i<data->ntime;i++){
+		for(int j=0;j<data->natoms;j++){
+			free(data->data_xyz[i][j]);
+		}
+	free(data->data_xyz[i]);
+	}
+	free(data->data_xyz);
+
 	free(data);
 	
-	//reset current_time and reads to zero, so that new molecules are loaded correctly after the first molecule was loaded
+	//reset current_time, reads, position_already_read to start values, so that new molecules are loaded correctly after the first molecule was loaded
 	current_time=0;
 	reads=0;
+	position_already_read =-1;
 }
 
 /* registration stuff */
