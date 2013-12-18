@@ -7,7 +7,7 @@ HDF5LDFLAGS=-L/usr/lib64
 HDF5CPPFLAGS=-I/usr/include
 
 # Which libraries to use
-HDF5LIBS=-lhdf5_hl -lhdf5 
+HDF5LIBS=-lhdf5_hl -lhdf5
 HDF5LIBSCPP=-lhdf5_cpp -lhdf5 
 
 # Location of the VMD include files vmdplugin.h and molfile_plugin.h.

@@ -110,7 +110,7 @@ static int read_h5md_structure(void *mydata, int *optflags,molfile_atom_t *atoms
 	//show errors
 	H5Eset_auto(H5E_DEFAULT, H5Eprint, NULL);
 	if(dataset_id_indexOfSpecies <0){
-		error_status_of_read = read_h5md_structure_no_vmd_structure(mydata,optflags,atoms);
+		error_status_of_read = read_h5md_structure_vmd_structure(mydata,optflags,atoms);
 	}else{
 		//requires ALL vmd_structure datasets
 		error_status_of_read = read_h5md_structure_vmd_structure(mydata,optflags,atoms);
