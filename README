@@ -5,5 +5,3 @@ To load the plugin in VMD add the following line to your ~/.vmdrc (replace the d
         vmd_plugin_scandirectory /PATH_TO_SO_DIRECTORY/ *.so
 
 (Another way to load the plugin is to move the .so file into the plugin folder of VMD)
-
-
