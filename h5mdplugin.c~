@@ -21,6 +21,7 @@
 #include "molfile_plugin.h"
 #include "hdf5.h"
 #include "hdf5_hl.h"
+#include "libh5md.h"
 
 //element symbols
 static const char *element_symbols[] = { 
@@ -74,7 +75,11 @@ int position_already_read =-1;
 int reads = 0;
 int current_time = 0;
 
-static void *open_h5md_read(const char *filename, const char *filetype, int *natoms) {
+static void *open_h5md_read(const char *filename, const char *filetype, int *natoms){
+	printf("try library\n");
+	h5mddata_lib *positions_direct_read= read_position_of_file(filename);	
+	printf("%f\n", positions_direct_read->data_xyz[1][3][2]);	
+printf("runs\n");
 	h5mddata *data;
 	data = (h5mddata *) malloc(sizeof(h5mddata));
 
@@ -110,7 +115,7 @@ static int read_h5md_structure(void *mydata, int *optflags,molfile_atom_t *atoms
 	//show errors
 	H5Eset_auto(H5E_DEFAULT, H5Eprint, NULL);
 	if(dataset_id_indexOfSpecies <0){
-		error_status_of_read = read_h5md_structure_vmd_structure(mydata,optflags,atoms);
+		error_status_of_read = read_h5md_structure_no_vmd_structure(mydata,optflags,atoms);
 	}else{
 		//requires ALL vmd_structure datasets
 		error_status_of_read = read_h5md_structure_vmd_structure(mydata,optflags,atoms);
@@ -306,16 +311,16 @@ int read_h5md_structure_vmd_structure(void *mydata, int *optflags,molfile_atom_t
 	herr_t status_atomicnumber= H5Dread(dataset_id_atomicnumber, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_atomicnumber);
 	status_atomicnumber = H5Dclose (dataset_id_atomicnumber);
 
-	//load num_segid
-	hid_t dataset_id_num_segid = H5Dopen(data->file_id, "/parameters/vmd_structure/num_segid",H5P_DEFAULT);
-	hid_t dataspace_num_segid = H5Dget_space(dataset_id_num_segid);
-	unsigned long long int dims_num_segid[1];
-	H5Sget_simple_extent_dims(dataspace_num_segid, dims_num_segid, NULL );
+	//load indexOfSegid
+	hid_t dataset_id_indexOfSegid = H5Dopen(data->file_id, "/parameters/vmd_structure/indexOfSegid",H5P_DEFAULT);
+	hid_t dataspace_indexOfSegid = H5Dget_space(dataset_id_indexOfSegid);
+	unsigned long long int dims_indexOfSegid[1];
+	H5Sget_simple_extent_dims(dataspace_indexOfSegid, dims_indexOfSegid, NULL );
 
 	//load content of segid
-	int data_num_segid[dims_num_segid[0]];
-	herr_t status_num_segid= H5Dread(dataset_id_num_segid, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_num_segid);
-	status_num_segid = H5Dclose (dataset_id_num_segid);
+	int data_indexOfSegid[dims_indexOfSegid[0]];
+	herr_t status_indexOfSegid= H5Dread(dataset_id_indexOfSegid, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_indexOfSegid);
+	status_indexOfSegid = H5Dclose (dataset_id_indexOfSegid);
 
 	//load segid
 	//open dataset
@@ -494,8 +499,8 @@ int read_h5md_structure_vmd_structure(void *mydata, int *optflags,molfile_atom_t
 		}
 
 		//set segid (segments may also consist of pure solvent or lipid)
-		if(dataset_id_num_segid>0&&dataset_id_segid>0 && (dims_num_segid[0] == data->natoms)){
-			strncpy(atom->segid,data_segid[data_num_segid[i]],sizeof(data_segid[data_num_segid[i]]));
+		if(dataset_id_indexOfSegid>0&&dataset_id_segid>0 && (dims_indexOfSegid[0] == data->natoms)){
+			strncpy(atom->segid,data_segid[data_indexOfSegid[i]],sizeof(data_segid[data_indexOfSegid[i]]));
 		}else{
 			printf("ERROR: segid not present or not every atom is assigned to a segment\n");
 			printf("using default values \n");
@@ -613,7 +618,7 @@ void read_position(h5mddata *data){
 }
 
 static int read_h5md_timestep(void *mydata, int natoms, molfile_timestep_t *ts) {
-	float x, y, z;
+	double x, y, z;
 
 	h5mddata *data = (h5mddata *) mydata;
 	
@@ -648,10 +653,6 @@ static int read_h5md_timestep(void *mydata, int natoms, molfile_timestep_t *ts) 
 	}
 
 	return MOLFILE_SUCCESS;
-}
-
-herr_t mute_hdf_err(void *unused){
-    
 }
 
 static int h5md_read_bonds_from_file(h5mddata *data){

@@ -1,0 +1,18 @@
+typedef struct {
+	int nspacedims;
+	int natoms;
+	int ntime;
+	//file handling
+	char *file_name;
+	//positions
+	double ***data_xyz;
+	hid_t dataset_id;
+	int ndims;
+}h5mddata_lib;
+
+void *open_h5md_read_lib(const char *filename, const char *filetype, int *natoms);
+void get_xyz_lib(void *mydata, int atom_nr, int time_i, double xyz_array[3], double*** data_xyz);
+void read_position_lib(h5mddata_lib *data);
+int read_h5md_timestep_lib(void *mydata, int natoms, double *** data_xyz, int time_i);
+h5mddata_lib* read_position_of_file(const char *filename);
+
