@@ -538,16 +538,12 @@ static int read_h5md_timestep(h5mddata_lib *data, int natoms, molfile_timestep_t
 	if (time_i >= ntime - 1) {
 		return MOLFILE_ERROR;
 	}
-	for (int i = 0; i < natoms; i++) {
-
-		time_i = reads / natoms;
+        time_i = reads / natoms;
 		reads += 1;
 		if (ts != NULL ) {
-			ts->coords[3 * i] = data->data_xyz[time_i][i][0];
-			ts->coords[3 * i + 1] = data->data_xyz[time_i][i][1];
-			ts->coords[3 * i + 2] = data->data_xyz[time_i][i][2];
+                  read_h5md_timestep_lib(data, ts->coords, time_i);
 		} else {
-			break;
+                  break;
 		}
 	}
 	return MOLFILE_SUCCESS;
