@@ -6,7 +6,7 @@ struct h5md_file;
 // all functions return 0 upon success and != 0 upon failure
 
 // opens the file, creates the internal structure and goes to the first timestep
-int h5md_open(struct h5md_file** file, const char *filename);
+int h5md_open(struct h5md_file** _file, const char *filename);
 
 // close the file and frees the internal structure
 int h5md_close(struct h5md_file* file);
@@ -18,38 +18,34 @@ const char* h5md_error(struct h5md_file* file);
 int h5md_seek_timestep(struct h5md_file* file, int i);
 
 // reads the next timestep, allocates coords and sets natoms to the number of atoms
-int h5md_get_timestep(struct h5md_file*, int* natoms, double **coords);
+int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords);
 
 // reads the next timestep and writes the data to coords iff natoms is the number of atoms in the timestep
-int h5md_read_timestep(struct h5md_file*, int natoms, double* coords);
+int h5md_read_timestep(struct h5md_file* file, int natoms, double* coords);
 
-typedef struct {
-	int nspacedims;
-	int natoms;
-	int ntime;
-	//file handling
-	char *file_name;
-	hid_t file_id;
-	hid_t dataset_id;
-	//bonds
-	int *nbonds;
-	int *bond_from;
-	int *bond_to;
-	//positions
-	double ***data_xyz;
-	int ndims;
-}h5mddata_lib;
+//reads the number of atoms
+int h5md_get_natoms(struct h5md_file* file, int* natoms);
 
-void open_h5md_read_lib(const char *filename, h5mddata_lib* data);
-void read_position_lib(h5mddata_lib *data);
-int read_h5md_timestep_lib(h5mddata_lib*data, int natoms, double ***data_xyz, int time_i);
-void read_position_of_file_lib(const char *filename, h5mddata_lib* data);
+//reads the current time
+int h5md_get_current_time(struct h5md_file* file, int* current_time);
 
-typedef struct{
-	hid_t dataset_id_species;
-	int *data_species;
-}h5mdspecies;
+//reads the total number of timesteps
+int h5md_get_ntime(struct h5md_file* file, int* ntime);
 
-void read_species(h5mddata_lib *data, h5mdspecies* species, int* data_speciess);
+
+//read time-independent dataset automatically
+int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t type_class_out); //XXX this should only use void* _data_out and later casting
+
+//free time-independent dataset automatically
+int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out);
+
+//get length of one-dimensional dataset
+int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *dataset_name, int *length_of_dataset);
+
+//hide hdf5 error messages
+void h5md_hide_hdf5_error_messages();
+
+//show hdf5 error messages
+void h5md_show_hdf5_error_messages();
 
 #endif
