@@ -5,7 +5,15 @@ struct h5md_file;
 
 // all functions return 0 upon success and != 0 upon failure
 
-// opens the file, creates the internal structure and goes to the first timestep
+//hide hdf5 error messages
+void h5md_hide_hdf5_error_messages();
+
+//show hdf5 error messages
+void h5md_show_hdf5_error_messages();
+
+/*read operations*/
+
+// opens the file, iff it exists and creates the internal structure and goes to the first timestep
 int h5md_open(struct h5md_file** _file, const char *filename);
 
 // close the file and frees the internal structure
@@ -32,9 +40,8 @@ int h5md_get_current_time(struct h5md_file* file, int* current_time);
 //reads the total number of timesteps
 int h5md_get_ntime(struct h5md_file* file, int* ntime);
 
-
 //read time-independent dataset automatically
-int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t type_class_out); //XXX this should only use void* _data_out and later casting
+int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out); //XXX this should only use void* _data_out and later casting
 
 //free time-independent dataset automatically
 int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out);
@@ -42,10 +49,15 @@ int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void
 //get length of one-dimensional dataset
 int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *dataset_name, int *length_of_dataset);
 
-//hide hdf5 error messages
-void h5md_hide_hdf5_error_messages();
 
-//show hdf5 error messages
-void h5md_show_hdf5_error_messages();
+
+/*write operations*/
+int h5md_create_file(struct h5md_file **_file, char* filename);
+int h5md_delete_file(char* filename);
+int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in);
+int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset);
+
+
+
 
 #endif

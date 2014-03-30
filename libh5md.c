@@ -6,6 +6,9 @@
 #include "hdf5_hl.h"
 #include "libh5md.h"
 
+#define TRUE	1
+#define FALSE	0
+
 /*
 Return value 0 means everything is fine
 */
@@ -25,19 +28,14 @@ struct h5md_file{
 	int ntime;
 	char *last_error_message;
 	int current_time;	//for h5md_seek_timestep()
-
-	//TODO time dependent data is stored in attributes -> H5A http://www.hdfgroup.org/HDF5/doc/RM/RM_H5A.html#Annot-Open
-	//int is_dataset;	//for time independent data
-	//int is_attribute;	//for time dependent data
 };
-
 
 // opens the file, creates the internal structure and goes to the first timestep
 // you have to use double pointers in order to be able to change a pointer in a foreing function
 int h5md_open(struct h5md_file** _file, const char *filename){
 	struct h5md_file *file = malloc(sizeof(struct h5md_file));
 
-	file->file_id = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
+	file->file_id = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT); // H5F_ACC_RDONLY <-> read only
 	file->pos_dataset_id = H5Dopen2(file->file_id, "/particles/atoms/position/value",H5P_DEFAULT);
 	
 	/*
@@ -72,7 +70,7 @@ int h5md_open(struct h5md_file** _file, const char *filename){
 int h5md_close(struct h5md_file* file){
 	if(file!=NULL){
 		H5Fclose(file->file_id);
-		free(file);
+		free(file);	//free h5md_file struct
 		return 0;	
 	}
 	else{
@@ -120,7 +118,7 @@ int h5md_seek_timestep(struct h5md_file* file, int i){
 
 
 // reads the next timestep, allocates coords and sets natoms to the number of atoms
-int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords){
+int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords){ //TODO rewrite should not store the data in h5md_file
 	/* 
 	* Define dataset dataspace in file.
 	*/
@@ -158,29 +156,21 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords){
 	* Read data from hyperslab in the file into the hyperslab in 
 	* memory and display.
 	*/
-	//data in memory have the order data_out[3*atom_nr+coord_i]
-	double data_out [file->natoms * file->nspacedims];
+	float* data_out= malloc(sizeof(float)*file->natoms * file->nspacedims); //data in memory have the order data_out[3*atom_nr+coord_i]
+	hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
+	H5Dread (file->pos_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+	*coords=data_out;
+
 	
-	H5Dread (file->pos_dataset_id, file->datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
-
-	float* data_out_float= malloc(sizeof(float)*file->natoms * file->nspacedims);
-
-	//nasty conversion from double to float
-	for(int i=0;i<file->natoms*file->nspacedims;i++){
-		data_out_float[i]=(float) data_out[i] ;
-	}
-	*coords=data_out_float;
-
-	//modify timestep
 	int current_time;
 	h5md_get_current_time(file,&current_time);
-	int status_seek= h5md_seek_timestep(file, current_time+1);
+	int status_seek= h5md_seek_timestep(file, current_time+1); //modify timestep
 	
-	//set natoms to the actual number of atoms
-	natoms=&(file->natoms);
 	
-	//close resources
-	H5Sclose(memspace_id);
+	natoms=&(file->natoms); //set natoms to the actual number of atoms
+	
+	
+	H5Sclose(memspace_id); //close resources
 	
 	if(status_seek==0){
 		return 0;
@@ -198,14 +188,14 @@ int h5md_read_timestep(struct h5md_file* file, int natoms, double* coords){
 
 
 //read timeindependent dataset automatically
-int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t type_class_out){
+int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out){
 	hid_t dataset_id = H5Dopen2(file->file_id, dataset_name,H5P_DEFAULT);	
 	/*
 	* Get datatype and dataspace handles and then query
 	* dataset class, order, size, rank and dimensions.
 	*/
 	hid_t datatype  = H5Dget_type(dataset_id);     /* datatype handle */
-	type_class_out     = H5Tget_class(datatype);
+	*type_class_out     = H5Tget_class(datatype);
 	//H5T_order_t order     = H5Tget_order(datatype);
 	size_t size_datatype  = H5Tget_size(datatype);
 	hid_t dataspace_id = H5Dget_space(dataset_id);    /* dataspace handle */
@@ -213,29 +203,26 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 	unsigned long long int dims_dataset[rank_dataset];
 	H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
 
-	switch (type_class_out) {
-	case H5T_INTEGER:
-		if(dataset_id<0){
-			return -1;
-		}else{
+	if(dataset_id<0){
+		printf("Dataset could not be opened.\n");
+		return -1;
+	}else{
+		switch (*type_class_out) {
+		case H5T_INTEGER:{
 			//determine needed size
 			int needed_size=dims_dataset[0];
 			int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
 			for(int i=1; i<len_dims_dataset; i++){
 				needed_size*=dims_dataset[i];
 			}
-
 			int* data_out=(int*) malloc(sizeof(size_datatype)*needed_size);
 			H5Dread(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
 			H5Dclose (dataset_id);
 			*(_data_out)=data_out;
 			return 0;
-		}
-	break;
-	case H5T_FLOAT:
-		if(dataset_id<0){
-			return -1;
-		}else{
+			}
+		break;
+		case H5T_FLOAT:{
 			//determine needed size
 			int needed_size=dims_dataset[0];
 			int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
@@ -247,53 +234,62 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 			H5Dclose (dataset_id);
 			*(_data_out)=data_out;
 			return 0;
-		}
-	break;
-	case H5T_STRING:
-		if(dataset_id<0){
-			return -1;
-		}else{
-			//load content of name
-			//get datatype and its size
-			hid_t filetype= H5Dget_type (dataset_id);
-			size_t sdim = H5Tget_size (filetype);
-			sdim++;// Make room for null terminator
-			/*
-			* Get dataspace and allocate memory for read buffer.  This is a
-			* two dimensional dataset so the dynamic allocation must be done
-			* in steps.
-			*/
-			H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
-			// Allocate array of pointers to rows.
-			char **data_out = (char **) malloc (dims_dataset[0] * sizeof (char *));		
-			// Allocate space for integer data.
-			data_out[0] = (char *) malloc (dims_dataset[0] * sdim * sizeof (char));
-			// Set the rest of the pointers to rows to the correct addresses.
-			for (int i=1; i<dims_dataset[0]; i++)
-				data_out[i] = data_out[0] + i * sdim;
-			// Create the memory datatype.
-			hid_t memtype = H5Tcopy (H5T_C_S1);
-			H5Tset_size (memtype, sdim);
-			// Read the data.
-			H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out[0]);
-			//close
-			H5Dclose (dataset_id);
-			H5Sclose (dataspace_id);
-			H5Tclose (filetype);
-			H5Tclose (memtype);
-			
-			*(_data_out)=data_out;
-			return 0;
-		}
-	break;
+			}
+		break;
+		case H5T_STRING:{
+				//load content of name
+				size_datatype++;// Make room for null terminator with which strings are terminated in C
+				/*
+				* Get dataspace and allocate memory for read buffer.  This is a
+				* two dimensional dataset so the dynamic allocation must be done
+				* in steps for fixed-length strings, for variable-length strings HDF5 does some stuff
+				*/
+				H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
+				// Allocate array of pointers to rows.
+				char **data_out = (char **) malloc (dims_dataset[0] * sizeof (char *));		
 
-	default:
-		if(dataset_id<0){
-			return -1;
-			printf("Dataset contains datatype that is not H5T_INTEGER, H5T_FLOAT or H5T_STRING. Not implemented case.\n");
+				if(H5Tis_variable_str(datatype)==0){
+					//string length is variable
+					// Allocate space for data.
+					data_out[0] = (char *) malloc (dims_dataset[0] * size_datatype);
+					// Set the rest of the pointers to rows to the correct addresses.
+					for (int i=1; i<dims_dataset[0]; i++)
+						data_out[i] = data_out[0] + i * size_datatype;
+					//Create the memory datatype.
+					H5T_class_t type_class_out = H5Tget_class(datatype);
+					hid_t memtype = H5Tcopy (H5T_C_S1);
+					H5Tset_size (memtype, size_datatype);
+					H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out[0]);
+					H5Tclose (memtype); //close memtype
+				}else{
+					//string length is fixed
+					//Create the memory datatype.
+					H5T_class_t type_class_out = H5Tget_class(datatype);
+					hid_t memtype = H5Tcopy (H5T_C_S1);
+					H5Tset_size (memtype, H5T_VARIABLE);
+					H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+					H5Tclose (memtype); //close memtype
+				}
+
+				*(_data_out)=data_out;
+				return 0;
+			}
+		break;
+
+		default:{
+				printf("Dataset contains datatype that is not H5T_INTEGER, H5T_FLOAT or H5T_STRING. Not implemented case.\n");
+			}
+		break;
 		}
-	break;
 	}
+
+
+	//close resources
+	H5Dclose (dataset_id);
+	H5Sclose (dataspace_id);
+	H5Tclose (datatype);
+
+
 }
 
 int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out){
@@ -340,4 +336,73 @@ void h5md_show_hdf5_error_messages(){
 	H5Eset_auto(H5E_DEFAULT, H5Eprint, NULL);
 }
 
+
+
+
+
+
+/* write operations */
+//creates a h5md_file if it does not exist yet
+
+int h5md_create_file(struct h5md_file **_file, char* filename){
+	struct h5md_file *file = (struct h5md_file*) malloc(sizeof(struct h5md_file));
+	/* Create a new file using default properties. */
+	hid_t file_id = H5Fcreate(filename, H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT); //H5F_ACC_EXCL <-> fail if file already exists, alternative H5F_ACC_TRUNC <-> overwrite file
+	file->file_id=file_id;
+	*(_file)=file;
+	if(file_id<0){
+		printf("ERROR: A file with this filename already exists.\n");
+		return -1;	
+	}else{
+		return 0;
+	}
+}
+
+int h5md_delete_file(char* filename){
+	int status = remove(filename);
+	if (status == 0)
+		return 0;
+	else
+		return -1;
+}
+
+int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in){
+	hid_t dataspace_id=H5Screate_simple(rank_in, dims_in, NULL);
+	hid_t link_crt_plist = H5Pcreate(H5P_LINK_CREATE);
+	H5Pset_create_intermediate_group(link_crt_plist, TRUE);	// Set flag for intermediate group creation
+	hid_t dataset_id = H5Dcreate(file->file_id, absolute_name_of_dataset, datatype, dataspace_id, link_crt_plist, H5P_DEFAULT, H5P_DEFAULT ); //create dataset in place
+	herr_t status_write = H5Dwrite(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_in);
+
+	H5Dclose(dataset_id);
+	H5Sclose(dataspace_id);
+	if(status_write>0)
+		return 0;
+	else
+		return -1;
+	return 0;
+}
+
+
+int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset){ //absolute_name_of_dataset="absolute_path/name_of_dataset"
+	hid_t dataset_id=H5Dopen(file->file_id, absolute_name_of_dataset,H5P_DEFAULT); //get dataset_id
+
+	herr_t status_delete=H5Ldelete(dataset_id, absolute_name_of_dataset ,H5P_DEFAULT);
+	if(status_delete>0)
+		return 0;
+	else
+		return -1;
+}
+
+int h5md_write_attribute(){
+
+}
+
+
+int h5md_delete_attribute(){
+
+}
+
+int h5md_copy_dataset(){
+
+}
 

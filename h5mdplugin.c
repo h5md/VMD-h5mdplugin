@@ -66,9 +66,7 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 
 /* read the coordinates */
 static int read_h5md_timestep(struct h5md_file *file, int natoms, molfile_timestep_t *ts) {
-	
-	//skip reading if ts is NULL pointer
-	if (ts != NULL ) { 
+	if (ts != NULL ) { //skip reading if ts is NULL pointer
 		//coords is array and has the following order: coords[3*atom_nr+coord_i]
         	int status_read_timestep=h5md_get_timestep(file, &natoms, (double**) &(ts->coords));
 		if(status_read_timestep!=0){
@@ -135,7 +133,7 @@ int read_h5md_structure_vmd_structure(struct h5md_file *file, int *optflags,molf
 	//load index of species
 	int* data_index_species;
 	H5T_class_t type_class_index_species;
-	int status_index_species=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/indexOfSpecies", &data_index_species, type_class_index_species);
+	int status_index_species=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/indexOfSpecies", &data_index_species, &type_class_index_species);
 
 	int len_data_index_species;
 	int status_read_index_species=h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/indexOfSpecies",&len_data_index_species);
@@ -143,7 +141,7 @@ int read_h5md_structure_vmd_structure(struct h5md_file *file, int *optflags,molf
 	//load species
 	int* data_species;
 	H5T_class_t type_class_species;
-	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species/value", &data_species, type_class_species);
+	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species/value", &data_species, &type_class_species);
 
 
 	//Declaring variables here since if one would declare them later in the else branch one could not access them to free them later, after the atoms have been assigned to their values
@@ -186,20 +184,20 @@ int read_h5md_structure_vmd_structure(struct h5md_file *file, int *optflags,molf
 		printf("ERROR: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as different species are present in /particles/atoms/species/value !\n");
 		printf("Skipping species related data.\n");
 	}else{
-		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name", &data_name, type_class_name);
-		status_read_type=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/type", &data_type, type_class_type);
-		status_read_mass=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/mass", &data_mass, type_class_mass);
-		status_read_radius=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/radius", &data_radius, type_class_radius);
-		status_read_atomicnumber=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/atomicnumber", &data_atomicnumber, type_class_atomicnumber);
+		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name", &data_name, &type_class_name);
+		status_read_type=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/type", &data_type, &type_class_type);
+		status_read_mass=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/mass", &data_mass, &type_class_mass);
+		status_read_radius=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/radius", &data_radius, &type_class_radius);
+		status_read_atomicnumber=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/atomicnumber", &data_atomicnumber, &type_class_atomicnumber);
 	}
 	
-	status_read_charge=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/charge", &data_charge, type_class_charge);;
-	status_read_segid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/segid", &data_segid, type_class_segid);
+	status_read_charge=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/charge", &data_charge, &type_class_charge);
+	status_read_segid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/segid", &data_segid, &type_class_segid);
 	//load resid
-	status_read_resid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resid", &data_resid, type_class_resid);
+	status_read_resid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resid", &data_resid, &type_class_resid);
 	if(status_read_resid==0){
-		status_read_resname=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resname", &data_resname, type_class_resname);
-		status_read_chain=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/chain", &data_chain, type_class_chain);	
+		status_read_resname=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resname", &data_resname, &type_class_resname);
+		status_read_chain=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/chain", &data_chain, &type_class_chain);	
 	}
 
 	//give data to VMD
@@ -303,8 +301,8 @@ static int h5md_get_bonds(struct h5md_file *file, int *nbonds, int **from, int *
 	bondtypename=NULL;
 	H5T_class_t type_class_bond_from;
 	H5T_class_t type_class_bond_to;
-	int status_read_bond_from=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_from", from, type_class_bond_from);
-	int status_read_bond_to=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_to", to, type_class_bond_to);
+	int status_read_bond_from=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_from", from, &type_class_bond_from);
+	int status_read_bond_to=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_to", to, &type_class_bond_to);
 	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/bond_from",nbonds); //save number of bonds to *nbonds
 	if(status_read_bond_from==0 && status_read_bond_to ==0){
   		return MOLFILE_SUCCESS;
@@ -312,13 +310,6 @@ static int h5md_get_bonds(struct h5md_file *file, int *nbonds, int **from, int *
 		return MOLFILE_ERROR;		
 	}
 }
-
-
-void close_h5md_file(struct h5md_file* file){
-	h5md_show_hdf5_error_messages();
-	h5md_close(file);
-}
-
 
 /* registration stuff */
 static molfile_plugin_t plugin;
