@@ -6,6 +6,8 @@
 #include "hdf5_hl.h"
 #include "libh5md.h"
 
+#include <unistd.h> //for set author to username
+
 #define TRUE	1
 #define FALSE	0
 
@@ -118,7 +120,7 @@ int h5md_seek_timestep(struct h5md_file* file, int i){
 
 
 // reads the next timestep, allocates coords and sets natoms to the number of atoms
-int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords){ //TODO rewrite should not store the data in h5md_file
+int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){ //TODO rewrite should not store the data in h5md_file
 	/* 
 	* Define dataset dataspace in file.
 	*/
@@ -140,7 +142,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords){ //T
 	* Define memory dataspace.
 	*/
 	int rank=1;
-	int dimsm[rank];
+	hsize_t dimsm[rank];
 	dimsm[0]=file->natoms* file->nspacedims;
 
 	hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
@@ -161,15 +163,11 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords){ //T
 	H5Dread (file->pos_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
 	*coords=data_out;
 
+	natoms=&(file->natoms); //set natoms to the actual number of atoms
 	
 	int current_time;
 	h5md_get_current_time(file,&current_time);
 	int status_seek= h5md_seek_timestep(file, current_time+1); //modify timestep
-	
-	
-	natoms=&(file->natoms); //set natoms to the actual number of atoms
-	
-	
 	H5Sclose(memspace_id); //close resources
 	
 	if(status_seek==0){
@@ -181,9 +179,12 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords){ //T
 
 
 // reads the next timestep and writes the data to coords iff natoms is the number of atoms in the timestep
-int h5md_read_timestep(struct h5md_file* file, int natoms, double* coords){
-	h5md_get_timestep(file,&natoms,&coords);
-
+int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
+	int status_read =h5md_get_timestep(file,&natoms,&coords); //TODO h5md_get timestep allocates new memory, h5md_read_timestep should not allocate new memory but write into existing memory -> this function may not use h5md_get_timestep if done correctly
+	if(status_read==0)
+		return 0;
+	else
+		return -1;
 }
 
 
@@ -256,7 +257,6 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 					for (int i=1; i<dims_dataset[0]; i++)
 						data_out[i] = data_out[0] + i * size_datatype;
 					//Create the memory datatype.
-					H5T_class_t type_class_out = H5Tget_class(datatype);
 					hid_t memtype = H5Tcopy (H5T_C_S1);
 					H5Tset_size (memtype, size_datatype);
 					H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out[0]);
@@ -264,7 +264,6 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 				}else{
 					//string length is fixed
 					//Create the memory datatype.
-					H5T_class_t type_class_out = H5Tget_class(datatype);
 					hid_t memtype = H5Tcopy (H5T_C_S1);
 					H5Tset_size (memtype, H5T_VARIABLE);
 					H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
@@ -278,18 +277,16 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 
 		default:{
 				printf("Dataset contains datatype that is not H5T_INTEGER, H5T_FLOAT or H5T_STRING. Not implemented case.\n");
+				return -1;
 			}
 		break;
 		}
 	}
 
-
 	//close resources
 	H5Dclose (dataset_id);
 	H5Sclose (dataspace_id);
 	H5Tclose (datatype);
-
-
 }
 
 int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out){
@@ -311,10 +308,19 @@ int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void
 
 }
 
+int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_name, int ** _data_out){
+	H5T_class_t type_class_out;
+	int status_read=h5md_read_timeindependent_dataset_automatically(file, dataset_name, (void**)_data_out, &type_class_out);
+	if( (status_read!=0) || (type_class_out =! H5Tget_class(H5T_NATIVE_INT)))
+		return -1;
+	else
+		return 0;
+}
+
 int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *dataset_name, int *length_of_dataset){
 	hid_t dataset_id = H5Dopen2(file->file_id, dataset_name,H5P_DEFAULT);
 	hid_t dataspace_id = H5Dget_space(dataset_id);    /* dataspace handle */
-	int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
+	hsize_t rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
 	unsigned long long int dims_dataset[rank_dataset];
 	H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
 	if(rank_dataset==1){
@@ -336,19 +342,25 @@ void h5md_show_hdf5_error_messages(){
 	H5Eset_auto(H5E_DEFAULT, H5Eprint, NULL);
 }
 
-
+int h5md_get_file_id(struct h5md_file *file, hid_t *file_id){
+	*file_id=file->file_id;
+	if(file_id !=0)
+		return 0;
+	else
+		return -1;
+}
 
 
 
 
 /* write operations */
-//creates a h5md_file if it does not exist yet
-
+//creates a h5md_file iff it does not exist yet
 int h5md_create_file(struct h5md_file **_file, char* filename){
 	struct h5md_file *file = (struct h5md_file*) malloc(sizeof(struct h5md_file));
 	/* Create a new file using default properties. */
 	hid_t file_id = H5Fcreate(filename, H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT); //H5F_ACC_EXCL <-> fail if file already exists, alternative H5F_ACC_TRUNC <-> overwrite file
 	file->file_id=file_id;
+	h5md_set_author(file, NULL); //set author by default to the user account name, can be overwritten by another call of h5md_set_author(file,"username");
 	*(_file)=file;
 	if(file_id<0){
 		printf("ERROR: A file with this filename already exists.\n");
@@ -393,11 +405,31 @@ int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset){
 		return -1;
 }
 
-int h5md_write_attribute(){
 
+//TODO but use H5LT http://www.hdfgroup.org/HDF5/hdf5_hl/doc/RM_hdf5lt.html#H5LTmake_dataset with easier interface
+/*
+int h5md_write_attribute(){
+}
+*/
+
+int h5md_set_author(struct h5md_file* file, char* name){
+	herr_t status_author =-1;
+	int status_username =-1;
+	if(name == NULL){
+		char username[33];	//current (2014) standard username may be 32 characters long
+		status_username=getlogin_r(username, sizeof(username));
+		status_author=H5LTset_attribute_string(file->file_id, "/", "author", username);
+	}else{
+		status_author=H5LTset_attribute_string(file->file_id, "/", "author", name);
+	}
+
+	if(status_author>0 || status_username==0)
+		return 0;	
+	else
+		return -1;	
 }
 
-
+/*
 int h5md_delete_attribute(){
 
 }
@@ -405,4 +437,5 @@ int h5md_delete_attribute(){
 int h5md_copy_dataset(){
 
 }
+*/
 

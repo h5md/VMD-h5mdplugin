@@ -6,7 +6,13 @@
 #include "hdf5_hl.h"
 #include "libh5md.h"
 
-
+#define CAST_TO_CORRECT_POINTER_TYPE(type_class_out, data_out)	switch(type_class_out)	\
+		{ case H5T_INTEGER: {int* data_out_corr= (int*) data_out; printf("read data int test: %d\n",data_out_corr[0]); break;}	\
+		  case H5T_FLOAT: {float* data_out_corr= (float* ) data_out; printf("read data float test: %d\n",data_out_corr[0]); break;}	\
+		  case H5T_STRING: {char** data_out_corr= (char**) data_out; printf("read data string test: %s\n",data_out_corr[2]); break;}	\
+		  default: printf("datatype not implemented\n"); break;			\
+		}				
+	
 int h5md_test_creation(){
 	h5md_show_hdf5_error_messages();
 	int status_del= h5md_delete_file("./samples/test_write.h5"); //delete if exists, otherwise error 
@@ -14,8 +20,8 @@ int h5md_test_creation(){
 	struct h5md_file *file;
 	h5md_create_file(&file,filename); //creates h5 file if it does not exist yet
 
-	// #######test1 ######## int, float
-
+	// #######test1 ########
+	
 	float data_in1[4]={1.9,1,1,1};
 	hid_t datatype1= H5T_NATIVE_FLOAT;
 	int rank_in1=1;
@@ -46,16 +52,12 @@ int h5md_test_creation(){
 	*/
 
 
-	h5md_close(file);
-
-
-
 
 	//read written dataset
 	H5T_class_t type_class_out;
 	void* data_out;
 
-	//int status_read=h5md_read_timeindependent_dataset_automatically(file, "/dataset/go/jjjj", &data_out, &type_class_out); //test 1
+	int status_read=h5md_read_timeindependent_dataset_automatically(file, "/dataset/go/jjjj", &data_out, &type_class_out); //test 1
 
 
 	//########other tests ##########
@@ -63,9 +65,9 @@ int h5md_test_creation(){
 	struct h5md_file* file_real;
  	h5md_open(&file_real, "./samples/full_vmd_structure.h5");
 	//int status_read=h5md_read_timeindependent_dataset_automatically(file_real, "/parameters/vmd_structure/mass", &data_out, &type_class_out);  //test 2
-	int status_read=h5md_read_timeindependent_dataset_automatically(file_real, "/parameters/vmd_structure/name", &data_out, &type_class_out);	//test 3
+	//int status_read=h5md_read_timeindependent_dataset_automatically(file_real, "/parameters/vmd_structure/name", &data_out, &type_class_out);	//test 3
 
-	h5md_close(file_real);
+	
 
 	int test_delete=-1;	//test 4
 	if(test_delete>0){
@@ -74,9 +76,9 @@ int h5md_test_creation(){
 		h5md_delete_dataset(file, "/dataset/go/jjjj");
 	}
 
-
 	//########################################
 
+/*
 	if(status_read==0){
 		switch(type_class_out){
 		case H5T_INTEGER:
@@ -105,10 +107,15 @@ int h5md_test_creation(){
 		// free stuff
 		h5md_free_timeindependent_dataset_automatically(type_class_out,data_out);
 	}
+*/
+	CAST_TO_CORRECT_POINTER_TYPE(type_class_out,data_out); //alternative to above
 
 
+	h5md_close(file);
+	h5md_close(file_real);
 }
 
 int main(){
 	h5md_test_creation();
+	
 }

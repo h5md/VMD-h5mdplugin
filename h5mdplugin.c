@@ -65,10 +65,12 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 
 
 /* read the coordinates */
-static int read_h5md_timestep(struct h5md_file *file, int natoms, molfile_timestep_t *ts) {
+static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
+	struct h5md_file* file=_file;
 	if (ts != NULL ) { //skip reading if ts is NULL pointer
-		//coords is array and has the following order: coords[3*atom_nr+coord_i]
-        	int status_read_timestep=h5md_get_timestep(file, &natoms, (double**) &(ts->coords));
+		float* data_temp; //use temporary array since ts->coords is initialized (and expected) by VMD and one may not simply change its location in memory 
+        	int status_read_timestep=h5md_get_timestep(file, &natoms, (float**) &(data_temp));
+		memcpy(ts->coords,data_temp,sizeof(float)*natoms*3);//coords is array and has the following order: coords[3*atom_nr+coord_i]
 		if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
@@ -126,22 +128,24 @@ int check_consistency_species_index_of_species(struct h5md_file *file, int len_d
 
 
 //load whole VMD structure
-int read_h5md_structure_vmd_structure(struct h5md_file *file, int *optflags,molfile_atom_t *atoms) {
+int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t *atoms) {
 	molfile_atom_t *atom;
 	*optflags = MOLFILE_ATOMICNUMBER | MOLFILE_MASS | MOLFILE_RADIUS;
+	struct h5md_file* file=_file;
 
 	//load index of species
 	int* data_index_species;
 	H5T_class_t type_class_index_species;
-	int status_index_species=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/indexOfSpecies", &data_index_species, &type_class_index_species);
+	//int status_inedx_species=h5md_read_timeindependent_dataset_int(file, "/parameters/vmd_structure/indexOfSpecies", &data_index_species);
+	int status_index_species=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/indexOfSpecies", (void**) &data_index_species, &type_class_index_species);
 
 	int len_data_index_species;
-	int status_read_index_species=h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/indexOfSpecies",&len_data_index_species);
+	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/indexOfSpecies",&len_data_index_species);
 
 	//load species
 	int* data_species;
 	H5T_class_t type_class_species;
-	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species/value", &data_species, &type_class_species);
+	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species/value", (void**) &data_species, &type_class_species);
 
 
 	//Declaring variables here since if one would declare them later in the else branch one could not access them to free them later, after the atoms have been assigned to their values
@@ -184,20 +188,20 @@ int read_h5md_structure_vmd_structure(struct h5md_file *file, int *optflags,molf
 		printf("ERROR: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as different species are present in /particles/atoms/species/value !\n");
 		printf("Skipping species related data.\n");
 	}else{
-		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name", &data_name, &type_class_name);
-		status_read_type=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/type", &data_type, &type_class_type);
-		status_read_mass=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/mass", &data_mass, &type_class_mass);
-		status_read_radius=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/radius", &data_radius, &type_class_radius);
-		status_read_atomicnumber=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/atomicnumber", &data_atomicnumber, &type_class_atomicnumber);
+		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name",(void**) &data_name, &type_class_name);
+		status_read_type=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/type",(void**) &data_type, &type_class_type);
+		status_read_mass=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/mass",(void**) &data_mass, &type_class_mass);
+		status_read_radius=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/radius",(void**) &data_radius, &type_class_radius);
+		status_read_atomicnumber=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/atomicnumber",(void**) &data_atomicnumber, &type_class_atomicnumber);
 	}
 	
-	status_read_charge=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/charge", &data_charge, &type_class_charge);
-	status_read_segid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/segid", &data_segid, &type_class_segid);
+	status_read_charge=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/charge",(void**) &data_charge, &type_class_charge);
+	status_read_segid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/segid",(void**) &data_segid, &type_class_segid);
 	//load resid
-	status_read_resid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resid", &data_resid, &type_class_resid);
+	status_read_resid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resid",(void**) &data_resid, &type_class_resid);
 	if(status_read_resid==0){
-		status_read_resname=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resname", &data_resname, &type_class_resname);
-		status_read_chain=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/chain", &data_chain, &type_class_chain);	
+		status_read_resname=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resname",(void**) &data_resname, &type_class_resname);
+		status_read_chain=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/chain",(void**) &data_chain, &type_class_chain);	
 	}
 
 	//give data to VMD
@@ -214,7 +218,7 @@ int read_h5md_structure_vmd_structure(struct h5md_file *file, int *optflags,molf
 					atom->atomicnumber = data_atomicnumber[index_of_species]; 	
 			}else{
 				atom->atomicnumber = data_atomicnumber[index_of_species]%112;
-				printf("ERROR: Too big atomic number was set in dataset. Using Modulo %112 to produce smaller atomic number");
+				printf("ERROR: Too big atomic number was set in dataset. Using modulo %%112 to produce smaller atomic number");
 				return MOLFILE_ERROR;
 			}
 		}else{
@@ -256,59 +260,56 @@ int read_h5md_structure_vmd_structure(struct h5md_file *file, int *optflags,molf
 
 
 	//After assignment free used resources
-	if(status_read_index_species==0)
+	if(status_index_species==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_index_species,data_index_species);
 	if(status_read_species==0)	
 		h5md_free_timeindependent_dataset_automatically(type_class_species,data_species);
-	if(status_read_name==0){
+	if(status_read_name==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_name,data_name);
-	}
-	if(status_read_type==0){
+	if(status_read_type==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_type,data_type);
-	}
-	if(status_read_mass==0){
+	if(status_read_mass==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_mass,data_mass);
-	}
-	if(status_read_radius==0){
+	if(status_read_radius==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_radius,data_radius);
-	}
-	if(status_read_atomicnumber==0){
+	if(status_read_atomicnumber==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_atomicnumber,data_atomicnumber);
-	}
-	if(status_read_charge==0){
+	if(status_read_charge==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_charge,data_charge);
-	}
-	if(status_read_segid==0){
+	if(status_read_segid==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_segid,data_segid);
-	}
-	if(status_read_resid==0){
+	if(status_read_resid==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_resid,data_resid);
-	}
-	if(status_read_resname==0){
+	if(status_read_resname==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_resname,data_resname);
-	}
-	if(status_read_chain==0){
+	if(status_read_chain==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_chain,data_chain);
-	}
+
 
 	return MOLFILE_SUCCESS;
 }
 
 
-static int h5md_get_bonds(struct h5md_file *file, int *nbonds, int **from, int **to, float **bondorder, int **bondtype,  int *nbondtypes, char ***bondtypename){
+static int h5md_get_bonds(void *_file, int *nbonds, int **from, int **to, float **bondorder, int **bondtype,  int *nbondtypes, char ***bondtypename){
 	*bondtype=NULL;
 	*nbondtypes=0;
 	bondtypename=NULL;
+	struct h5md_file* file=_file; 
 	H5T_class_t type_class_bond_from;
 	H5T_class_t type_class_bond_to;
-	int status_read_bond_from=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_from", from, &type_class_bond_from);
-	int status_read_bond_to=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_to", to, &type_class_bond_to);
+	int status_read_bond_from=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_from",(void**) from, &type_class_bond_from);
+	int status_read_bond_to=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_to",(void**) to, &type_class_bond_to);
 	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/bond_from",nbonds); //save number of bonds to *nbonds
 	if(status_read_bond_from==0 && status_read_bond_to ==0){
   		return MOLFILE_SUCCESS;
 	}else{
 		return MOLFILE_ERROR;		
 	}
+}
+
+void close_file(void* _file){
+	struct h5md_file* file=_file;
+	h5md_close(file);
 }
 
 /* registration stuff */
@@ -322,14 +323,14 @@ VMDPLUGIN_API int VMDPLUGIN_init() {
 	plugin.prettyname = "h5md";
 	plugin.author = "Sascha Ehrhardt, Jonas Landsgesell";
 	plugin.majorv = 1;
-	plugin.minorv = 0;
+	plugin.minorv = 5;
 	plugin.is_reentrant = VMDPLUGIN_THREADSAFE;
 	plugin.filename_extension = "h5";
 	plugin.open_file_read = open_h5md_read;
 	plugin.read_structure = read_h5md_structure_vmd_structure;
 	plugin.read_next_timestep = read_h5md_timestep;
 	plugin.read_bonds = h5md_get_bonds;
-	plugin.close_file_read = h5md_close;
+	plugin.close_file_read = close_file;
 	
 
 	return VMDPLUGIN_SUCCESS;

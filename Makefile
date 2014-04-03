@@ -49,4 +49,5 @@ clean:
 	-rm libh5md.o
 	-rm libh5md.so
 	-rm test_libh5md
+	-rm samples/test_write.h5
 	-rm *~

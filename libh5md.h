@@ -26,10 +26,10 @@ const char* h5md_error(struct h5md_file* file);
 int h5md_seek_timestep(struct h5md_file* file, int i);
 
 // reads the next timestep, allocates coords and sets natoms to the number of atoms
-int h5md_get_timestep(struct h5md_file* file, int* natoms, double **coords);
+int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords);
 
 // reads the next timestep and writes the data to coords iff natoms is the number of atoms in the timestep
-int h5md_read_timestep(struct h5md_file* file, int natoms, double* coords);
+int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords);
 
 //reads the number of atoms
 int h5md_get_natoms(struct h5md_file* file, int* natoms);
@@ -41,7 +41,9 @@ int h5md_get_current_time(struct h5md_file* file, int* current_time);
 int h5md_get_ntime(struct h5md_file* file, int* ntime);
 
 //read time-independent dataset automatically
-int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out); //XXX this should only use void* _data_out and later casting
+int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out);
+
+int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_name, int** _data_out);
 
 //free time-independent dataset automatically
 int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out);
@@ -56,7 +58,7 @@ int h5md_create_file(struct h5md_file **_file, char* filename);
 int h5md_delete_file(char* filename);
 int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in);
 int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset);
-
+int h5md_set_author(struct h5md_file* file, char* name);
 
 
 
