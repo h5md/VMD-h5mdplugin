@@ -34,33 +34,39 @@ struct h5md_file{
 
 // opens the file, creates the internal structure and goes to the first timestep
 // you have to use double pointers in order to be able to change a pointer in a foreing function
-int h5md_open(struct h5md_file** _file, const char *filename){
+int h5md_open(struct h5md_file** _file, const char *filename, int can_write){
 	struct h5md_file *file = malloc(sizeof(struct h5md_file));
 
-	file->file_id = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT); // H5F_ACC_RDONLY <-> read only
+	if(can_write==0)
+		file->file_id = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT); //read&write access
+	else
+		file->file_id = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
+	h5md_hide_hdf5_error_messages();
 	file->pos_dataset_id = H5Dopen2(file->file_id, "/particles/atoms/position/value",H5P_DEFAULT);
 	
-	/*
-	* Get datatype and dataspace handles and then query
-	* dataset class, order, size, rank and dimensions.
-	*/
-	file->datatype  = H5Dget_type(file->pos_dataset_id);     /* datatype handle */
-	file->t_class     = H5Tget_class(file->datatype);
-	file->order     = H5Tget_order(file->datatype);
-	file->size_datatype  = H5Tget_size(file->datatype);
-	file->dataspace = H5Dget_space(file->pos_dataset_id);    /* dataspace handle */
-	file->rank_dataset      = H5Sget_simple_extent_ndims(file->dataspace);
-	hsize_t dims_out[file->rank_dataset];
-	H5Sget_simple_extent_dims(file->dataspace, dims_out, NULL);
+	if(file->pos_dataset_id>0){
+		/*
+		* Get datatype and dataspace handles and then query
+		* dataset class, order, size, rank and dimensions.
+		*/
+		file->datatype  = H5Dget_type(file->pos_dataset_id);     /* datatype handle */
+		file->t_class     = H5Tget_class(file->datatype);
+		file->order     = H5Tget_order(file->datatype);
+		file->size_datatype  = H5Tget_size(file->datatype);
+		file->dataspace = H5Dget_space(file->pos_dataset_id);    /* dataspace handle */
+		file->rank_dataset      = H5Sget_simple_extent_ndims(file->dataspace);
+		hsize_t dims_out[file->rank_dataset];
+		H5Sget_simple_extent_dims(file->dataspace, dims_out, NULL);
 	
-	file->ntime = dims_out[0];
-	file->natoms = dims_out[1];
-	file->nspacedims = dims_out[2];
+		file->ntime = dims_out[0];
+		file->natoms = dims_out[1];
+		file->nspacedims = dims_out[2];
 	
-	file->current_time=0;	//set current time to 0
+		file->current_time=0;	//set current time to 0
+	}
 	
 	*_file = file;
-	if(file->pos_dataset_id <0){
+	if(file->file_id <0){
 		return -1;
 	}else{
 		return 0;
@@ -98,6 +104,12 @@ int h5md_get_natoms(struct h5md_file* file, int* natoms){
 	return 0;
 }
 
+//set number of atoms iff this number is constant during time
+int h5md_set_natoms(struct h5md_file* file, int natoms){
+	file->natoms=natoms;
+	return 0;
+}
+
 //get current time
 int h5md_get_current_time(struct h5md_file* file, int* current_time){
 	(*current_time)=file->current_time;
@@ -109,7 +121,7 @@ int h5md_get_current_time(struct h5md_file* file, int* current_time){
 int h5md_seek_timestep(struct h5md_file* file, int i){
 	int ntime;
 	h5md_get_ntime(file,&ntime);
-	if(i<ntime){
+	if(i<=ntime){
 		file->current_time=i;
 		return 0;
 	}else{
@@ -190,6 +202,7 @@ int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
 
 //read timeindependent dataset automatically
 int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out){
+	int status;
 	hid_t dataset_id = H5Dopen2(file->file_id, dataset_name,H5P_DEFAULT);	
 	/*
 	* Get datatype and dataspace handles and then query
@@ -206,7 +219,7 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 
 	if(dataset_id<0){
 		printf("Dataset could not be opened.\n");
-		return -1;
+		status=-1;
 	}else{
 		switch (*type_class_out) {
 		case H5T_INTEGER:{
@@ -217,10 +230,9 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 				needed_size*=dims_dataset[i];
 			}
 			int* data_out=(int*) malloc(sizeof(size_datatype)*needed_size);
-			H5Dread(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
-			H5Dclose (dataset_id);
+			int status_read=H5Dread(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+			status=status_read;
 			*(_data_out)=data_out;
-			return 0;
 			}
 		break;
 		case H5T_FLOAT:{
@@ -231,10 +243,9 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 				needed_size*=dims_dataset[i];
 			}
 			float* data_out=(float*) malloc(sizeof(size_datatype)*needed_size);
-			H5Dread(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
-			H5Dclose (dataset_id);
+			int status_read=H5Dread(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+			status=status_read;
 			*(_data_out)=data_out;
-			return 0;
 			}
 		break;
 		case H5T_STRING:{
@@ -259,25 +270,26 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 					//Create the memory datatype.
 					hid_t memtype = H5Tcopy (H5T_C_S1);
 					H5Tset_size (memtype, size_datatype);
-					H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out[0]);
+					int status_read=H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out[0]);
+					status=status_read;
 					H5Tclose (memtype); //close memtype
 				}else{
 					//string length is fixed
 					//Create the memory datatype.
 					hid_t memtype = H5Tcopy (H5T_C_S1);
 					H5Tset_size (memtype, H5T_VARIABLE);
-					H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+					int status_read=H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+					status=status_read;
 					H5Tclose (memtype); //close memtype
 				}
 
 				*(_data_out)=data_out;
-				return 0;
 			}
 		break;
 
 		default:{
 				printf("Dataset contains datatype that is not H5T_INTEGER, H5T_FLOAT or H5T_STRING. Not implemented case.\n");
-				return -1;
+				status=-1;
 			}
 		break;
 		}
@@ -287,6 +299,7 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 	H5Dclose (dataset_id);
 	H5Sclose (dataspace_id);
 	H5Tclose (datatype);
+	return status;
 }
 
 int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out){
@@ -311,6 +324,7 @@ int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void
 int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_name, int ** _data_out){
 	H5T_class_t type_class_out;
 	int status_read=h5md_read_timeindependent_dataset_automatically(file, dataset_name, (void**)_data_out, &type_class_out);
+
 	if( (status_read!=0) || (type_class_out =! H5Tget_class(H5T_NATIVE_INT)))
 		return -1;
 	else
@@ -355,12 +369,12 @@ int h5md_get_file_id(struct h5md_file *file, hid_t *file_id){
 
 /* write operations */
 //creates a h5md_file iff it does not exist yet
-int h5md_create_file(struct h5md_file **_file, char* filename){
+int h5md_create_file(struct h5md_file **_file, const char* filename){
 	struct h5md_file *file = (struct h5md_file*) malloc(sizeof(struct h5md_file));
 	/* Create a new file using default properties. */
 	hid_t file_id = H5Fcreate(filename, H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT); //H5F_ACC_EXCL <-> fail if file already exists, alternative H5F_ACC_TRUNC <-> overwrite file
 	file->file_id=file_id;
-	h5md_set_author(file, NULL); //set author by default to the user account name, can be overwritten by another call of h5md_set_author(file,"username");
+	h5md_set_author(file, NULL, NULL); //sets author name by default to the user account name, can be overwritten by another call of h5md_set_author(file,"username");
 	*(_file)=file;
 	if(file_id<0){
 		printf("ERROR: A file with this filename already exists.\n");
@@ -379,27 +393,173 @@ int h5md_delete_file(char* filename){
 }
 
 int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in){
-	hid_t dataspace_id=H5Screate_simple(rank_in, dims_in, NULL);
+	int status;
 	hid_t link_crt_plist = H5Pcreate(H5P_LINK_CREATE);
 	H5Pset_create_intermediate_group(link_crt_plist, TRUE);	// Set flag for intermediate group creation
-	hid_t dataset_id = H5Dcreate(file->file_id, absolute_name_of_dataset, datatype, dataspace_id, link_crt_plist, H5P_DEFAULT, H5P_DEFAULT ); //create dataset in place
+
+	//Modify dataset creation properties, i.e. enable chunking. 
+	//Chunking has to be enabled at the creation time of the dataset!
+	//"The storage properties cannot be changed after the dataset is created"
+	hid_t cparms = H5Pcreate (H5P_DATASET_CREATE);
+	H5Pset_chunk( cparms, rank_in, dims_in); // enable chunking
+	
+	
+	switch(H5Tget_class(datatype)){
+		case H5T_INTEGER:
+		{	
+			int filler =-1;
+			H5Pset_fill_value(cparms, datatype, &filler);//set fill value
+		break;
+		}	
+		case H5T_FLOAT:
+		{
+			float filler =-1.0;
+			H5Pset_fill_value(cparms, datatype, &filler);//set fill value
+		break;
+		}	
+		case H5T_STRING:
+		{	
+			char* filler ="filler";
+			H5Pset_fill_value(cparms, datatype, &filler);//set fill value
+		break;
+		}
+		default:
+			printf("datatype not implemented\n");
+		break;
+	}
+	
+	
+	
+	hsize_t* maxdims=malloc(sizeof(hsize_t)*rank_in);
+	for(int i=0;i<rank_in;i++){
+		maxdims[i]=H5S_UNLIMITED;	
+	}
+	hid_t dataspace_id=H5Screate_simple(rank_in, dims_in, maxdims);
+
+	hid_t dataset_id = H5Dcreate(file->file_id, absolute_name_of_dataset, datatype, dataspace_id, link_crt_plist, cparms, H5P_DEFAULT); //create dataset
 	herr_t status_write = H5Dwrite(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_in);
 
+	free(maxdims);
 	H5Dclose(dataset_id);
 	H5Sclose(dataspace_id);
-	if(status_write>0)
+
+	if(status_write>=0)
+		status= 0;
+	else
+		status= -1;
+	return status;
+}
+
+int max(int a, int b){
+	if(a>b)
+		return a;
+	else
+		return b;
+}
+
+//appends data to dataset, create dataset if it is not yet existing
+int h5md_append_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in){
+	int status;
+	//check existence of dataset
+	h5md_hide_hdf5_error_messages();
+	hid_t dataset_id = H5Dopen2(file->file_id, absolute_name_of_dataset ,H5P_DEFAULT);
+	h5md_show_hdf5_error_messages();
+
+	if(dataset_id>0){
+		hid_t datatype_read  = H5Dget_type(dataset_id);     // datatype handle
+		H5T_class_t type_class_read     = H5Tget_class(datatype_read);
+		hid_t dataspace_id = H5Dget_space(dataset_id);    //dataspace handle
+		int rank_dataset_read = H5Sget_simple_extent_ndims(dataspace_id);
+		unsigned long long int dims_dataset_read[rank_dataset_read];
+		H5Sget_simple_extent_dims(dataspace_id, dims_dataset_read, NULL);
+
+		//check consistency // 
+		if(rank_in != rank_dataset_read || H5Tget_class(datatype) != type_class_read){
+			printf("Data cannot be appended to dataset.\n");
+			status=-1;
+		}else{
+			//append to dataset, compare http://www.hdfgroup.org/HDF5/doc/H5.intro.html#Intro-PMCreateExtendible and linked example there
+			unsigned long long int* size=malloc(sizeof(unsigned long long int)*rank_in);
+			for(int i=0;i<rank_in;i++){
+				if(i==0)
+					size[i]=dims_dataset_read[0]+dims_in[0];
+				else
+					size[i]=max(dims_in[i],dims_dataset_read[i]);
+			}
+			H5Dextend (dataset_id, size);
+
+			//Select a hyperslab.
+			hid_t filespace = H5Dget_space(dataset_id);
+			hsize_t* offset=malloc(sizeof(hsize_t)*rank_in);
+			for(int i=0;i<rank_in;i++){
+				if(i==0)
+					offset[i]=dims_dataset_read[0];
+				else
+					offset[i]=0;
+			}
+			H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offset, NULL, dims_in, NULL);  
+			hid_t dataspace = H5Screate_simple(rank_in, dims_in, NULL); //Define memory space
+			herr_t status_write = H5Dwrite(dataset_id, datatype_read, dataspace, filespace, H5P_DEFAULT, data_in); //Write the data to the hyperslab.
+			if(status_write>=0)
+				status=0;
+			else
+				status=-1;
+			H5Dclose(dataset_id);
+			H5Sclose(dataspace);
+			H5Sclose(filespace);
+			free(offset);
+			free(size);	
+		}
+
+
+	}else{
+		//create dataset if it is not yet existing
+		status=h5md_write_dataset(file, absolute_name_of_dataset, datatype, data_in, rank_in, dims_in);
+	}
+	return status;
+}
+
+int get_fill_value(struct h5md_file* file, char* absolute_name_of_dataset, void* filler){
+	hid_t dataset_id=H5Dopen(file->file_id, absolute_name_of_dataset, H5P_DEFAULT);
+	hid_t plist2 = H5Dget_create_plist(dataset_id);
+	herr_t status;
+	hid_t datatype  = H5Dget_type(dataset_id);     // datatype handle
+	switch(H5Tget_class(datatype)){
+		case H5T_INTEGER:
+		{	
+			status=H5Pget_fill_value(plist2, H5T_NATIVE_INT, (int*) filler);
+		break;
+		}	
+		case H5T_FLOAT:
+		{
+			status=H5Pget_fill_value(plist2, H5T_NATIVE_FLOAT, (float*) filler);
+		break;
+		}	
+		case H5T_STRING:
+		{	
+			status=H5Pget_fill_value(plist2, H5T_STRING, (char*) filler);
+		break;
+		}
+		default:
+			printf("datatype not implemented\n");
+		break;
+	}
+
+	
+	if(status>=0)
 		return 0;
 	else
 		return -1;
-	return 0;
 }
 
 
 int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset){ //absolute_name_of_dataset="absolute_path/name_of_dataset"
+	//HDF5 does not at this time provide an easy mechanism to remove a dataset from a file or to reclaim the storage space occupied by a deleted object.
+
 	hid_t dataset_id=H5Dopen(file->file_id, absolute_name_of_dataset,H5P_DEFAULT); //get dataset_id
 
 	herr_t status_delete=H5Ldelete(dataset_id, absolute_name_of_dataset ,H5P_DEFAULT);
-	if(status_delete>0)
+	if(status_delete>=0)
 		return 0;
 	else
 		return -1;
@@ -412,22 +572,35 @@ int h5md_write_attribute(){
 }
 */
 
-int h5md_set_author(struct h5md_file* file, char* name){
-	herr_t status_author =-1;
-	int status_username =-1;
+int h5md_set_author(struct h5md_file* file, char* name, char* email_address){
+	H5Gcreate(file->file_id, "/author", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+	herr_t status_name =-1;
+	int status_username_os =-1;
 	if(name == NULL){
-		char username[33];	//current (2014) standard username may be 32 characters long
-		status_username=getlogin_r(username, sizeof(username));
-		status_author=H5LTset_attribute_string(file->file_id, "/", "author", username);
+		char username[33];	//current (2014) standard username may be 32 characters long + 1 character for null termination
+		status_username_os=getlogin_r(username, sizeof(username));
+		status_name=H5LTset_attribute_string(file->file_id, "/author", "name", username);
 	}else{
-		status_author=H5LTset_attribute_string(file->file_id, "/", "author", name);
+		status_name=H5LTset_attribute_string(file->file_id, "/author", "name", name);
+	}
+	
+	int status_email =-1;
+	if(email_address==NULL){
+		status_email=H5LTset_attribute_string(file->file_id, "/author", "email", "email was not provided");
+	}else{
+		status_email=H5LTset_attribute_string(file->file_id, "/author", "email", email_address);	
 	}
 
-	if(status_author>0 || status_username==0)
+	if( (status_name>0 || status_username_os==0) && status_email>0 )
 		return 0;	
 	else
 		return -1;	
 }
+
+//int h5md_set_version(struct h5md_file* file, char* name){
+
+//}
 
 /*
 int h5md_delete_attribute(){

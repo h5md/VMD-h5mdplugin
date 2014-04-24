@@ -57,7 +57,7 @@ const int default_atomicnumber= 1;
 static void *open_h5md_read(const char *filename, const char *filetype, int *natoms){
 	h5md_hide_hdf5_error_messages();
 	struct h5md_file* file;
-	h5md_open(&file,filename);
+	h5md_open(&file,filename,-1);
 	h5md_get_natoms(file, natoms);
 	return file;
 }
@@ -147,7 +147,6 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	H5T_class_t type_class_species;
 	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species/value", (void**) &data_species, &type_class_species);
 
-
 	//Declaring variables here since if one would declare them later in the else branch one could not access them to free them later, after the atoms have been assigned to their values
 	char **data_name;
 	int status_read_name=-1;
@@ -179,7 +178,6 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	char** data_chain;
 	int status_read_chain=-1;
 	H5T_class_t type_class_chain;
-
 	int natoms;
 	h5md_get_natoms(file, &natoms);
 	
@@ -203,17 +201,18 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		status_read_resname=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resname",(void**) &data_resname, &type_class_resname);
 		status_read_chain=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/chain",(void**) &data_chain, &type_class_chain);	
 	}
-
 	//give data to VMD
 	for (int i = 0; i < natoms; i++) {
 		atom = atoms + i;
 		//set species related properties
-		int index_of_species=find_index_of_species(data_index_species,data_species[i],len_data_index_species);
-		if(status_read_type==0)
+		int index_of_species=-1;
+		if(status_index_species==0 && status_read_species>0)
+			index_of_species=find_index_of_species(data_index_species,data_species[i],len_data_index_species);
+		if(status_read_type==0 && status_index_species==0)
 			strncpy(atom->type, data_type[index_of_species], 16*sizeof(char));	//set type for atom of species
 		else
 			strncpy(atom->type,default_type,16*sizeof(char));
-		if(status_read_atomicnumber==0){	//set atomicnumber
+		if(status_read_atomicnumber==0 && status_index_species==0){	//set atomicnumber
 			if(data_atomicnumber[index_of_species]<112){
 					atom->atomicnumber = data_atomicnumber[index_of_species]; 	
 			}else{
@@ -224,15 +223,15 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		}else{
 			atom->atomicnumber = default_atomicnumber;
 		}
-		if (status_read_name==0)
+		if (status_read_name==0 && status_index_species==0)
 			strncpy(atom->name,data_name[index_of_species],16*sizeof(char));	//set elementname for atom of species
 		else
 			strncpy(atom->name,element_symbols[atom->atomicnumber],16*sizeof(char));
-		if(status_read_mass==0)
+		if(status_read_mass==0 && status_index_species==0)
 			atom->mass = data_mass[index_of_species];	//set mass for atom of species
 		else
 			atom->mass=default_mass;
-		if(status_read_radius==0)	
+		if(status_read_radius==0 && status_index_species==0)	
 			atom->radius = data_radius[index_of_species];	//set radius for atom of species
 		else
 			atom->radius=default_radius;
@@ -257,7 +256,6 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		else
 			strncpy(atom->chain,default_chain,2*sizeof(char));
 	}
-
 
 	//After assignment free used resources
 	if(status_index_species==0)
@@ -312,6 +310,30 @@ void close_file(void* _file){
 	h5md_close(file);
 }
 
+
+//write operations
+void* open_h5md_write(const char* filename, const char *filetype, int natoms){
+	struct h5md_file* file;
+	h5md_create_file(&file, filename);
+	h5md_set_natoms(file, natoms);
+	return file;
+}
+
+static int write_h5md_timestep(void* _file, const molfile_timestep_t *ts){
+	struct h5md_file* file=(struct h5md_file*) _file;
+	int natoms;
+	h5md_get_natoms(file, &natoms);
+	int rank_in=3;
+	hsize_t dims_in[3];
+	dims_in[0] =1;	//for one timestep
+	dims_in[1] =natoms;
+	dims_in[2] =3; //number of space dimensions
+
+	h5md_append_dataset(file, "/particles/atoms/position/value", H5T_NATIVE_FLOAT, (void*) ts->coords, rank_in, dims_in);
+
+	return MOLFILE_SUCCESS;
+}
+
 /* registration stuff */
 static molfile_plugin_t plugin;
 
@@ -331,6 +353,10 @@ VMDPLUGIN_API int VMDPLUGIN_init() {
 	plugin.read_next_timestep = read_h5md_timestep;
 	plugin.read_bonds = h5md_get_bonds;
 	plugin.close_file_read = close_file;
+	plugin.open_file_write = open_h5md_write;
+	//plugin.write_structure = write_h5md_vmd_structure;
+	plugin.write_timestep = write_h5md_timestep;
+	plugin.close_file_write = close_file;
 	
 
 	return VMDPLUGIN_SUCCESS;

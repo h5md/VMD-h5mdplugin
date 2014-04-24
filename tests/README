@@ -1,0 +1,2 @@
+In order to be able to run tests on libh5md please get googletest and specify its path in the variable FUSED_GTEST_DIR in the makefile which is located in this directory.
+Tests are written in file libh5md_test.cc, they need to be registered in libh5md_unittest.cc and libh5md_unittest.hpp
