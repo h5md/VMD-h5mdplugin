@@ -353,7 +353,7 @@ void h5md_hide_hdf5_error_messages(){
 }
 
 void h5md_show_hdf5_error_messages(){
-	H5Eset_auto(H5E_DEFAULT, H5Eprint, NULL);
+	H5Eset_auto(H5E_DEFAULT, (H5E_auto_t) H5Eprint, stderr);
 }
 
 int h5md_get_file_id(struct h5md_file *file, hid_t *file_id){

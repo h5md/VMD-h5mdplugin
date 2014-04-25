@@ -32,7 +32,8 @@ all : gtest_main.o libh5md_unittest
 
 # makes everything and runs the built sample test.
 check : all
-	./libh5md_unittest
+	-mkdir -p ./samples
+	-./libh5md_unittest
 
 gtest-all.o : $(FUSED_GTEST_H) $(FUSED_GTEST_ALL_CC)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(FUSED_GTEST_ALL_CC)

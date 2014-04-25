@@ -145,8 +145,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	//load species
 	int* data_species;
 	H5T_class_t type_class_species;
-	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species/value", (void**) &data_species, &type_class_species);
-
+	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species", (void**) &data_species, &type_class_species);
 	//Declaring variables here since if one would declare them later in the else branch one could not access them to free them later, after the atoms have been assigned to their values
 	char **data_name;
 	int status_read_name=-1;
@@ -183,7 +182,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	
 	int species_check = check_consistency_species_index_of_species(file, len_data_index_species, data_species);
 	if(species_check!=0){
-		printf("ERROR: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as different species are present in /particles/atoms/species/value !\n");
+		printf("ERROR: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as different species are present in /particles/atoms/species !\n");
 		printf("Skipping species related data.\n");
 	}else{
 		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name",(void**) &data_name, &type_class_name);
@@ -192,7 +191,6 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		status_read_radius=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/radius",(void**) &data_radius, &type_class_radius);
 		status_read_atomicnumber=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/atomicnumber",(void**) &data_atomicnumber, &type_class_atomicnumber);
 	}
-	
 	status_read_charge=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/charge",(void**) &data_charge, &type_class_charge);
 	status_read_segid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/segid",(void**) &data_segid, &type_class_segid);
 	//load resid
@@ -206,8 +204,9 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		atom = atoms + i;
 		//set species related properties
 		int index_of_species=-1;
-		if(status_index_species==0 && status_read_species>0)
+		if(status_index_species==0 && status_read_species>=0)
 			index_of_species=find_index_of_species(data_index_species,data_species[i],len_data_index_species);
+
 		if(status_read_type==0 && status_index_species==0)
 			strncpy(atom->type, data_type[index_of_species], 16*sizeof(char));	//set type for atom of species
 		else
@@ -223,6 +222,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		}else{
 			atom->atomicnumber = default_atomicnumber;
 		}
+
 		if (status_read_name==0 && status_index_species==0)
 			strncpy(atom->name,data_name[index_of_species],16*sizeof(char));	//set elementname for atom of species
 		else
@@ -256,7 +256,6 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		else
 			strncpy(atom->chain,default_chain,2*sizeof(char));
 	}
-
 	//After assignment free used resources
 	if(status_index_species==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_index_species,data_index_species);
