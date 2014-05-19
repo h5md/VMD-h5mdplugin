@@ -175,7 +175,6 @@ int h5md_open(struct h5md_file** _file, const char *filename, int can_write){
 // close file, datasets and frees the internal structure
 int h5md_close(struct h5md_file* file){
 	if(file!=NULL){
-
 		if(file->ngroups>0){
 			for(int i=0; i<file->ngroups; i++){//close datasets
 				H5Dclose(file->groups[i].pos_dataset_id);
@@ -185,6 +184,7 @@ int h5md_close(struct h5md_file* file){
 		}
 		H5Fclose(file->file_id);
 		free(file);	//free h5md_file struct
+		
 		return 0;
 	}
 	else{
@@ -561,6 +561,7 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 //creates a h5md_file iff it does not exist yet
 int h5md_create_file(struct h5md_file **_file, const char* filename){
 	struct h5md_file *file = (struct h5md_file*) malloc(sizeof(struct h5md_file));
+	initialize_h5md_struct(file);
 	/* Create a new file using default properties. */
 	hid_t file_id = H5Fcreate(filename, H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT); //H5F_ACC_EXCL <-> fail if file already exists, alternative H5F_ACC_TRUNC <-> overwrite file
 	file->file_id=file_id;
@@ -593,7 +594,6 @@ int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, h
 	hid_t cparms = H5Pcreate (H5P_DATASET_CREATE);
 	H5Pset_chunk( cparms, rank_in, dims_in); // enable chunking
 	
-	
 	switch(H5Tget_class(datatype)){
 		case H5T_INTEGER:
 		{	
@@ -619,7 +619,6 @@ int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, h
 	}
 	
 	
-	
 	hsize_t* maxdims=malloc(sizeof(hsize_t)*rank_in);
 	for(int i=0;i<rank_in;i++){
 		maxdims[i]=H5S_UNLIMITED;	
@@ -632,7 +631,6 @@ int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, h
 	free(maxdims);
 	H5Dclose(dataset_id);
 	H5Sclose(dataspace_id);
-
 	if(status_write>=0)
 		status= 0;
 	else
@@ -640,14 +638,14 @@ int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, h
 	return status;
 }
 
+
 //appends data to dataset, create dataset if it is not yet existing
 int h5md_append_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in){
 	int status;
 	//check existence of dataset
 	h5md_hide_hdf5_error_messages();
-	hid_t dataset_id = H5Dopen2(file->file_id, absolute_name_of_dataset ,H5P_DEFAULT);
+	hid_t dataset_id = H5Dopen2(file->file_id, absolute_name_of_dataset, H5P_DEFAULT);
 	h5md_show_hdf5_error_messages();
-
 	if(dataset_id>0){
 		hid_t datatype_read  = H5Dget_type(dataset_id);     // datatype handle
 		H5T_class_t type_class_read     = H5Tget_class(datatype_read);
@@ -687,14 +685,14 @@ int h5md_append_dataset(struct h5md_file *file, char* absolute_name_of_dataset, 
 				status=0;
 			else
 				status=-1;
-			H5Dclose(dataset_id);
 			H5Sclose(dataspace);
 			H5Sclose(filespace);
 			free(offset);
 			free(size);	
 		}
-
-
+		H5Tclose(datatype_read);
+		H5Sclose(dataspace_id);
+		H5Dclose(dataset_id);
 	}else{
 		//create dataset if it is not yet existing
 		status=h5md_write_dataset(file, absolute_name_of_dataset, datatype, data_in, rank_in, dims_in);
@@ -797,6 +795,7 @@ int h5md_rename_dataset(){
 
 
 /* boring helper functions */
+
 char* concatenate_strings(const char* string1, const char* string2){
 	char* concat_string=malloc(strlen(string1)+strlen(string2)+1);	//+1 for 0 termination
 	concat_string=strcpy(concat_string, string1);

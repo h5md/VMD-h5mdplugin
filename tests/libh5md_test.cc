@@ -196,7 +196,7 @@ int test_delete_dataset(char* absolute_name_of_dataset){//depends on test_write_
 	printf("status_del dataset %d \n", status);
 	h5md_close(file);
 	return status;
-} ///XXX TODO Tests are not orthogonal if test_delete_dataset() is run after (->libh5md_unittest.cc) read_real_dataset_string() then segfault in h5md_write_dataset()
+}
 
 int test_appending_to_dataset_position_style(){//depends on test_create_file() since it tries to access this file
 	test_create_file();

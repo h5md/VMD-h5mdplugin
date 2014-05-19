@@ -20,11 +20,6 @@ TEST(h5mdWriteTest, read_string_dataset) {
 	EXPECT_EQ(0, read_string_dataset()); 
 }
 
-
-TEST(h5mdWriteTest, test_delete_dataset) {
-	EXPECT_EQ(0, test_delete_dataset("/dataset/go/jjjj"));
-}
-
 TEST(h5mdWriteTest, test_appending_to_dataset_position_style) {
 	EXPECT_EQ(0, test_appending_to_dataset_position_style());
 }
@@ -36,6 +31,11 @@ TEST(h5mdWriteTest, read_real_dataset_float) {
 
 TEST(h5mdWriteTest, read_real_dataset_string) {
 	EXPECT_EQ(0, read_real_dataset_string());
+}
+
+
+TEST(h5mdWriteTest, test_delete_dataset) {
+	EXPECT_EQ(0, test_delete_dataset("/dataset/go/jjjj"));
 }
 
 TEST(h5mdWriteTest, test_appending_to_onedimensional_dataset_float) {

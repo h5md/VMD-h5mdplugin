@@ -309,7 +309,7 @@ static int h5md_get_bonds(void *_file, int *nbonds, int **from, int **to, float 
 void close_file(void* _file){
 	struct h5md_file* file=_file;
 	h5md_close(file);
-	//TODO bonds from, to need to be freed, compare l. 01050 http://www.ks.uiuc.edu/Research/vmd/plugins/doxygen/psfplugin_8c-source.html
+	//TODO bonds from, to need to be freed, compare line 01050 http://www.ks.uiuc.edu/Research/vmd/plugins/doxygen/psfplugin_8c-source.html
 }
 
 
@@ -331,9 +331,12 @@ static int write_h5md_timestep(void* _file, const molfile_timestep_t *ts){
 	dims_in[1] =natoms;
 	dims_in[2] =3; //number of space dimensions
 
-	h5md_append_dataset(file, "/particles/atoms/position/value", H5T_NATIVE_FLOAT, (void*) ts->coords, rank_in, dims_in);
-
-	return MOLFILE_SUCCESS;
+	int status= h5md_append_dataset(file, "/particles/atoms/position/value", H5T_NATIVE_FLOAT, (void*) ts->coords, rank_in, dims_in);
+	
+	if(status==0)
+		return MOLFILE_SUCCESS;
+	else
+		return MOLFILE_ERROR;
 }
 
 /* registration stuff */
