@@ -68,9 +68,7 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	struct h5md_file* file=_file;
 	if (ts != NULL ) { //skip reading if ts is NULL pointer
-		float* data_temp; //use temporary array since ts->coords is initialized (and expected) by VMD and one may not simply change its location in memory 
-        	int status_read_timestep=h5md_get_timestep(file, &natoms, (float**) &(data_temp));
-		memcpy(ts->coords,data_temp,sizeof(float)*natoms*3);//coords is array and has the following order: coords[3*atom_nr+coord_i]
+		int status_read_timestep=h5md_read_timestep(file, natoms, ts->coords);
 		if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
@@ -142,10 +140,13 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	int len_data_index_species;
 	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/indexOfSpecies",&len_data_index_species);
 
+	int len_data_resname;
+	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/resname",&len_data_resname);
+
 	//load species
 	int* data_species;
-	H5T_class_t type_class_species;
-	int status_read_species=h5md_read_timeindependent_dataset_automatically(file, "/particles/atoms/species", (void**) &data_species, &type_class_species);
+	H5T_class_t type_class_species=H5T_INTEGER;
+	int status_read_species=h5md_get_all_species_infromation(file, (int**) &data_species);
 	//Declaring variables here since if one would declare them later in the else branch one could not access them to free them later, after the atoms have been assigned to their values
 	char **data_name;
 	int status_read_name=-1;
@@ -223,8 +224,9 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 			atom->atomicnumber = default_atomicnumber;
 		}
 
-		if (status_read_name==0 && status_index_species==0)
+		if (status_read_name==0 && status_index_species==0){
 			strncpy(atom->name,data_name[index_of_species],16*sizeof(char));	//set elementname for atom of species
+		}
 		else
 			strncpy(atom->name,element_symbols[atom->atomicnumber],16*sizeof(char));
 		if(status_read_mass==0 && status_index_species==0)
@@ -258,29 +260,29 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	}
 	//After assignment free used resources
 	if(status_index_species==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_index_species,data_index_species);
+		h5md_free_timeindependent_dataset_automatically(type_class_index_species,data_index_species, 0);
 	if(status_read_species==0)	
-		h5md_free_timeindependent_dataset_automatically(type_class_species,data_species);
+		h5md_free_timeindependent_dataset_automatically(type_class_species,data_species, 0);
 	if(status_read_name==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_name,data_name);
+		h5md_free_timeindependent_dataset_automatically(type_class_name,data_name, len_data_index_species);
 	if(status_read_type==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_type,data_type);
+		h5md_free_timeindependent_dataset_automatically(type_class_type,data_type, len_data_index_species);
 	if(status_read_mass==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_mass,data_mass);
+		h5md_free_timeindependent_dataset_automatically(type_class_mass,data_mass, 0);
 	if(status_read_radius==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_radius,data_radius);
+		h5md_free_timeindependent_dataset_automatically(type_class_radius,data_radius, 0);
 	if(status_read_atomicnumber==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_atomicnumber,data_atomicnumber);
+		h5md_free_timeindependent_dataset_automatically(type_class_atomicnumber,data_atomicnumber, 0);
 	if(status_read_charge==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_charge,data_charge);
+		h5md_free_timeindependent_dataset_automatically(type_class_charge,data_charge, 0);
 	if(status_read_segid==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_segid,data_segid);
+		h5md_free_timeindependent_dataset_automatically(type_class_segid,data_segid, natoms);
 	if(status_read_resid==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_resid,data_resid);
+		h5md_free_timeindependent_dataset_automatically(type_class_resid,data_resid, 0);
 	if(status_read_resname==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_resname,data_resname);
+		h5md_free_timeindependent_dataset_automatically(type_class_resname,data_resname, len_data_resname);
 	if(status_read_chain==0)
-		h5md_free_timeindependent_dataset_automatically(type_class_chain,data_chain);
+		h5md_free_timeindependent_dataset_automatically(type_class_chain,data_chain, len_data_resname);
 
 
 	return MOLFILE_SUCCESS;
@@ -307,6 +309,7 @@ static int h5md_get_bonds(void *_file, int *nbonds, int **from, int **to, float 
 void close_file(void* _file){
 	struct h5md_file* file=_file;
 	h5md_close(file);
+	//TODO bonds from, to need to be freed, compare l. 01050 http://www.ks.uiuc.edu/Research/vmd/plugins/doxygen/psfplugin_8c-source.html
 }
 
 

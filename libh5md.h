@@ -25,10 +25,13 @@ const char* h5md_error(struct h5md_file* file);
 // go to the i'th timestep
 int h5md_seek_timestep(struct h5md_file* file, int i);
 
-// reads the next timestep, allocates coords and sets natoms to the number of atoms
+// reads the next timestep of all groups, allocates coords and sets natoms to the number of atoms
 int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords);
 
-// reads the next timestep and writes the data to coords iff natoms is the number of atoms in the timestep
+//reads species information of all groups, allocates species_infromation_out
+int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infromation_out);
+
+// reads the next timestep of all groups and writes the data to coords iff natoms is the number of atoms in the timestep
 int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords);
 
 //reads the number of atoms
@@ -49,29 +52,34 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_name, int** _data_out);
 
 //free time-independent dataset automatically
-int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out);
+int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out, int length_array_of_strings);
 
 //get length of one-dimensional dataset
 int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *dataset_name, int *length_of_dataset);
 
 
-
 /*write operations*/
+
 //creates a h5 file and sets the author (if not overwritten later, the username of the currently logged in user is used) and saves the reference to this bare file in a h5md_file struct, fails if a file with the provided filename already exists
 int h5md_create_file(struct h5md_file **_file, const char* filename);
+
 //sets the author's name and email. if name==NULL then the username of the currently logged in user is used, if email_address==NULL, then no email adress is written
 int h5md_set_author(struct h5md_file* file, char* name, char* email_address);
+
 //deletes a file
 int h5md_delete_file(char* filename);
+
 //writes a dataset of given datatype
 int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in);
+
 //appends to an existing dataset or creates it
 int h5md_append_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* positions_in, int rank_in, hsize_t* dims_in);
+
 //gets the fill value of a dataset
 int get_fill_value(struct h5md_file* file, char* absolute_name_of_dataset, void* filler);
+
 //deletes a dataset
 int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset);
-
 
 
 

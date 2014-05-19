@@ -6,7 +6,8 @@
 #include "hdf5_hl.h"
 #include "libh5md.h"
 
-#include <unistd.h> //for set author to username
+#include <libgen.h>	//for use of basename
+#include <unistd.h>	//for use of getlogin_r
 
 #define TRUE	1
 #define FALSE	0
@@ -15,10 +16,23 @@
 Return value 0 means everything is fine
 */
 
-//file handling
-struct h5md_file{
-	hid_t file_id;
+//declaration of "private" functions, cannot be accessed from outside the library
+//declaration here in order to be able to sort the content of the file according to it's "importance"
+char* concatenate_strings(const char* string1,const char* string2);
+int modify_information_about_file_content(struct h5md_file* file, char* group_name);
+int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id);
+herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t* info, void* _file);
+//declaration of boring helper functions
+int initialize_h5md_struct(struct h5md_file* file);
+int max(int a, int b);
+
+//group handling
+typedef struct h5md_group{
+	char* group_path;
+	int natoms_group;
 	hid_t pos_dataset_id;
+	hid_t species_dataset_id;
+	int* atom_ids;	//TODO use it
 	hid_t datatype;
 	H5T_class_t t_class;
 	H5T_order_t order;
@@ -26,66 +40,159 @@ struct h5md_file{
 	hid_t dataspace;
 	int rank_dataset;
 	int nspacedims;
+
+} h5md_group;
+
+
+//file handling
+struct h5md_file{
+	hid_t file_id;
+	h5md_group* groups;
+	int ngroups;	
 	int natoms;
 	int ntime;
 	char *last_error_message;
 	int current_time;	//for h5md_seek_timestep()
 };
 
+
+int discover_all_groups(struct h5md_file* file){
+	H5Lvisit(file->file_id, H5_INDEX_NAME, H5_ITER_NATIVE, check_for_pos_dataset, (void*) file);	//discover all groups with position datasets
+	return 0;
+}
+
+//checks whether current object is a position group, then adds the dataset_id to the pos_dataset_id array in the h5md_file file
+herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t* info, void* _file){
+	int status=0;
+	struct h5md_file* file=_file;
+
+	if(! strcmp(basename((char*)obj_name), "position")){
+		H5G_stat_t statbuf;
+		H5Gget_objinfo(g_id , obj_name , FALSE, &statbuf);	//check, whether the object is a group 
+		if(statbuf.type==H5G_GROUP){
+			char* full_path_position_dataset=concatenate_strings((const char*) obj_name,(const char*) "/value");	
+			hid_t pos_dataset_id=H5Dopen2(file->file_id, full_path_position_dataset ,H5P_DEFAULT);
+			free(full_path_position_dataset);
+
+			if(pos_dataset_id>=0)
+				status=modify_information_about_file_content(file, dirname((char*)obj_name));
+				printf("Position dataset found in group /%s.\n", obj_name);
+		}
+	}
+	return status;	//if status is 0 search for other position datasets continues. If status is negative, search is aborted.
+}
+
+
+int modify_information_about_file_content(struct h5md_file* file, char* group_name){
+	int status=-1;
+	
+	//get pos_dataset_id
+	char* full_path_position_dataset=concatenate_strings((const char*) group_name,(const char*) "/position/value");	
+	hid_t pos_dataset_id=H5Dopen2(file->file_id, full_path_position_dataset ,H5P_DEFAULT);
+	free(full_path_position_dataset);
+
+	//get species_dataset_id
+	char* full_path_species_dataset=concatenate_strings((const char*) group_name,(const char*) "/species/value");	
+	hid_t species_dataset_id=H5Dopen2(file->file_id, full_path_species_dataset ,H5P_DEFAULT);
+	free(full_path_species_dataset);
+
+	if(check_compatibility(file, pos_dataset_id)==0){
+		file->ngroups+=1;
+
+		h5md_group* groups=(h5md_group*) realloc(file->groups, sizeof(h5md_group)*(file->ngroups));	//effectively appends one entry to array
+
+		groups[file->ngroups-1].pos_dataset_id=pos_dataset_id;
+		groups[file->ngroups-1].species_dataset_id=species_dataset_id;		
+	
+		/*
+		* Get datatype and dataspace handles and then query
+		* dataset class, order, size, rank and dimensions. Since all datasets are checked to be compatible do this only for the first dataset
+		*/
+
+		groups[file->ngroups-1].datatype  = H5Dget_type(pos_dataset_id);     // datatype handle
+		groups[file->ngroups-1].t_class     = H5Tget_class(groups[file->ngroups-1].datatype);
+		groups[file->ngroups-1].order     = H5Tget_order(groups[file->ngroups-1].datatype);
+
+		groups[file->ngroups-1].size_datatype  = H5Tget_size(groups[file->ngroups-1].datatype);
+		groups[file->ngroups-1].dataspace = H5Dget_space(pos_dataset_id);	//dataspace handle
+		groups[file->ngroups-1].rank_dataset      = H5Sget_simple_extent_ndims(groups[file->ngroups-1].dataspace);
+		hsize_t dims_out[groups[file->ngroups-1].rank_dataset];
+		H5Sget_simple_extent_dims(groups[file->ngroups-1].dataspace, dims_out, NULL);
+		file->ntime = dims_out[0];
+		file->natoms += dims_out[1];
+		groups[file->ngroups-1].nspacedims = dims_out[2];
+		groups[file->ngroups-1].natoms_group=dims_out[1];
+	
+
+		file->groups=groups;
+
+		status=0;
+	}else{
+		printf("position datasets are not compatible");
+		status=-1;	
+	}
+	return status;
+}
+
+int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id){
+	hid_t new_dataspace = H5Dget_space(new_pos_dataset_id);	//dataspace handle
+	int new_rank_dataset = H5Sget_simple_extent_ndims(new_dataspace);
+	hsize_t dims_out[new_rank_dataset];
+	H5Sget_simple_extent_dims(new_dataspace, dims_out, NULL);
+	int ntime_new_pos_dataset =(int) dims_out[0];
+
+	if(file->ntime==ntime_new_pos_dataset || (file->ngroups==0 && new_pos_dataset_id>0))	//ngroups=0 from initialization
+		return 0;
+	else
+		return -1;
+}
+
+
+
+
 // opens the file, creates the internal structure and goes to the first timestep
 // you have to use double pointers in order to be able to change a pointer in a foreing function
 int h5md_open(struct h5md_file** _file, const char *filename, int can_write){
 	struct h5md_file *file = malloc(sizeof(struct h5md_file));
 
-	if(can_write==0)
+	if(can_write==TRUE)
 		file->file_id = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT); //read&write access
 	else
 		file->file_id = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
 	h5md_hide_hdf5_error_messages();
-	file->pos_dataset_id = H5Dopen2(file->file_id, "/particles/atoms/position/value",H5P_DEFAULT);
-	
-	if(file->pos_dataset_id>0){
-		/*
-		* Get datatype and dataspace handles and then query
-		* dataset class, order, size, rank and dimensions.
-		*/
-		file->datatype  = H5Dget_type(file->pos_dataset_id);     /* datatype handle */
-		file->t_class     = H5Tget_class(file->datatype);
-		file->order     = H5Tget_order(file->datatype);
-		file->size_datatype  = H5Tget_size(file->datatype);
-		file->dataspace = H5Dget_space(file->pos_dataset_id);    /* dataspace handle */
-		file->rank_dataset      = H5Sget_simple_extent_ndims(file->dataspace);
-		hsize_t dims_out[file->rank_dataset];
-		H5Sget_simple_extent_dims(file->dataspace, dims_out, NULL);
-	
-		file->ntime = dims_out[0];
-		file->natoms = dims_out[1];
-		file->nspacedims = dims_out[2];
-	
-		file->current_time=0;	//set current time to 0
-	}
-	
+
+	initialize_h5md_struct(file);
+	discover_all_groups(file);
+
 	*_file = file;
 	if(file->file_id <0){
 		return -1;
 	}else{
 		return 0;
-	}	
+	}
 }
 
-
-// close the file and frees the internal structure
+// close file, datasets and frees the internal structure
 int h5md_close(struct h5md_file* file){
 	if(file!=NULL){
+
+		if(file->ngroups>0){
+			for(int i=0; i<file->ngroups; i++){//close datasets
+				H5Dclose(file->groups[i].pos_dataset_id);
+				H5Dclose(file->groups[i].species_dataset_id);
+			}
+			free(file->groups);
+		}
 		H5Fclose(file->file_id);
 		free(file);	//free h5md_file struct
-		return 0;	
+		return 0;
 	}
 	else{
 		return -1;	
 	}
 
 }
+
 
 // return the current error message 
 const char* h5md_error(struct h5md_file* file){
@@ -132,55 +239,69 @@ int h5md_seek_timestep(struct h5md_file* file, int i){
 
 
 // reads the next timestep, allocates coords and sets natoms to the number of atoms
-int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){ //TODO rewrite should not store the data in h5md_file
-	/* 
-	* Define dataset dataspace in file.
-	*/
-	hid_t dataspace_id=H5Dget_space(file->pos_dataset_id);
-	/* 
-	* Define hyperslab in the dataset. 
-	*/
-	hsize_t dataset_slab_offset[file->rank_dataset];
-	hsize_t dataset_slab_count[file->rank_dataset];
-	dataset_slab_offset[0] = file->current_time;
-	dataset_slab_offset[1] = 0;
-	dataset_slab_offset[2]=0;
-	dataset_slab_count[0] = 1;
-	dataset_slab_count[1] = file->natoms;
-	dataset_slab_count[2] = file->nspacedims;
-	H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
+
+	float* data_out= malloc(sizeof(float)*file->natoms * 3); //allocate space for data in memory, which have the order data_out[3*atom_nr+coord_i] Remark: 3 could be the maximum over i of file->groups[i].nspacedims
+
+	int previous_atoms=0;
+	for(int i=0; i<file->ngroups; i++){//go through all groups
+		hid_t dataspace_id=H5Dget_space(file->groups[i].pos_dataset_id); //Define dataset dataspace in file.
+
+		/* 
+		* Define hyperslab in the dataset. 
+		*/
+		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+		dataset_slab_offset[0] = file->current_time;
+		dataset_slab_offset[1] = 0;
+		dataset_slab_offset[2]=0;
+
+		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		dataset_slab_count[0] = 1;
+		dataset_slab_count[1] = file->groups[i].natoms_group;
+		dataset_slab_count[2] = file->groups[i].nspacedims;
+		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
 	
-	/*
-	* Define memory dataspace.
-	*/
-	int rank=1;
-	hsize_t dimsm[rank];
-	dimsm[0]=file->natoms* file->nspacedims;
+		/*
+		* Define memory dataspace.
+		*/
+		int rank=1; //linear data representation
+		hsize_t dimsm[rank];
+		dimsm[0]=file->natoms* file->groups[i].nspacedims;
 
-	hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+		hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
 
-	/* 
-	* Define memory hyperslab. 
-	*/
-	//hsize_t offset_out[1]={0};
-	//hsize_t count_out[1]={file->natoms*file->nspacedims};
-	//herr_t status = H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+		/* 
+		* Define memory hyperslab. 
+		*/
+		hsize_t offset_out[rank];
+		hsize_t count_out[rank];
+		if(i<1){
+			offset_out[0]=0;
+			count_out[0]=file->natoms*file->groups[i].nspacedims;
+		}else{
+			offset_out[0]=previous_atoms*file->groups[i].nspacedims;
+			count_out[0]=offset_out[0]+file->groups[i].natoms_group*file->groups[i].nspacedims;		
+		}
+		previous_atoms+=file->groups[i].natoms_group;
+		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+		
 
-	/*
-	* Read data from hyperslab in the file into the hyperslab in 
-	* memory and display.
-	*/
-	float* data_out= malloc(sizeof(float)*file->natoms * file->nspacedims); //data in memory have the order data_out[3*atom_nr+coord_i]
-	hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
-	H5Dread (file->pos_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		/*
+		* Read data from hyperslab in the file into the hyperslab in memory
+		*/
+		
+		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
+		H5Dread (file->groups[i].pos_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		H5Sclose(memspace_id); //close resources
+	}
+
 	*coords=data_out;
-
 	natoms=&(file->natoms); //set natoms to the actual number of atoms
 	
 	int current_time;
 	h5md_get_current_time(file,&current_time);
 	int status_seek= h5md_seek_timestep(file, current_time+1); //modify timestep
-	H5Sclose(memspace_id); //close resources
+	
 	
 	if(status_seek==0){
 		return 0;
@@ -190,13 +311,13 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){ //TO
 }
 
 
-// reads the next timestep and writes the data to coords iff natoms is the number of atoms in the timestep
+// reads the next timestep and writes the data to coords (for which the memory has been allocated externally before the call of this function) iff natoms is the number of atoms in the timestep
 int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
-	int status_read =h5md_get_timestep(file,&natoms,&coords); //TODO h5md_get timestep allocates new memory, h5md_read_timestep should not allocate new memory but write into existing memory -> this function may not use h5md_get_timestep if done correctly
-	if(status_read==0)
-		return 0;
-	else
-		return -1;
+	float* data_out_temp;
+	int status_read =h5md_get_timestep(file, &natoms, (float**) &(data_out_temp));
+	memcpy(coords, data_out_temp, sizeof(float)*natoms*3);
+	free(data_out_temp);
+	return status_read;
 }
 
 
@@ -218,7 +339,7 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 	H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
 
 	if(dataset_id<0){
-		printf("Dataset could not be opened.\n");
+		printf("Dataset %s could not be opened.\n", dataset_name);
 		status=-1;
 	}else{
 		switch (*type_class_out) {
@@ -302,18 +423,24 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 	return status;
 }
 
-int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out){
+int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out, int length_array_of_strings){
 	switch (type_class) {
-	case H5T_INTEGER:
-		old_data_out=(int*) old_data_out;
-		free(old_data_out);
-	break;
+	case H5T_INTEGER:	//stacking case conditions before break produces OR condition
 	case H5T_FLOAT:
 		free(old_data_out);
 	break;
-	case H5T_STRING:
-		old_data_out=(char *) old_data_out; //TODO not correct free for an array of strings which should have void **old_data_out -> missing free(*old_data_out);
-		free(old_data_out);
+	case H5T_STRING:{//TODO differentiate between fixed and variable length strings for correct free
+
+//The following is only for variable length strings
+/*		char** old_data_string= (char**) old_data_out;*/
+/*		for(int i=0;i<length_array_of_strings;i++){*/
+/*			free(((char**)old_data_out)[i]);*/
+/*		}*/
+
+//This is only for fixed length strings
+		free(((char**)old_data_out)[0]);
+		free(old_data_out); 
+	}
 	break;
 	}
 
@@ -342,7 +469,7 @@ int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *data
 		*length_of_dataset=dims_dataset[0];
 		return 0;
 	}else{
-		printf("Dataset is not one dimensional.\n");	
+		printf("Dataset %s is not one dimensional.\n", dataset_name);	
 		return -1;	
 	}
 }
@@ -364,7 +491,70 @@ int h5md_get_file_id(struct h5md_file *file, hid_t *file_id){
 		return -1;
 }
 
+int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infromation_out){
+	//derived from h5md_get_timestep() above
+	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
+	int* data_out= malloc(sizeof(float)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
+
+	int previous_atoms=0;
+	for(int i=0; i<file->ngroups; i++){//go through all groups
+		hid_t dataspace_id=H5Dget_space(file->groups[i].species_dataset_id); //Define dataset dataspace in file.
+
+		/* 
+		* Define hyperslab in the dataset. 
+		*/
+		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+		dataset_slab_offset[0] = previous_atoms;
+		previous_atoms+=file->groups[i].natoms_group;
+		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		dataset_slab_count[0] = file->groups[i].natoms_group;
+		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+	
+		/*
+		* Define memory dataspace.
+		*/
+		int rank=1; //linear data representation
+		hsize_t dimsm[rank];
+		dimsm[0]=file->natoms;
+
+		hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+
+		/* 
+		* Define memory hyperslab. 
+		*/
+		hsize_t offset_out[rank];
+		hsize_t count_out[rank];
+		if(i<1){
+			offset_out[0]=0;
+			count_out[0]=file->natoms;
+		}else{
+			offset_out[0]=previous_atoms;
+			count_out[0]=offset_out[0]+file->groups[i].natoms_group;		
+		}
+
+		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+		
+
+		/*
+		* Read data from hyperslab in the file into the hyperslab in memory
+		*/
+		
+		hid_t wanted_memory_datatype = H5T_NATIVE_INT;
+		H5Dread (file->groups[i].species_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		H5Sclose(memspace_id); //close resources
+	}
+
+	*species_infromation_out=data_out;
+	
+	return 0;
+
+}
+
+/*int h5md_get_dataset_information_from_all_groups(struct h5md_file *file, char* relative_dataset_name , void** data_out){*/
+
+/*	return 0;*/
+/*}*/
 
 
 /* write operations */
@@ -448,13 +638,6 @@ int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, h
 	else
 		status= -1;
 	return status;
-}
-
-int max(int a, int b){
-	if(a>b)
-		return a;
-	else
-		return b;
 }
 
 //appends data to dataset, create dataset if it is not yet existing
@@ -565,21 +748,13 @@ int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset){
 		return -1;
 }
 
-
-//TODO but use H5LT http://www.hdfgroup.org/HDF5/hdf5_hl/doc/RM_hdf5lt.html#H5LTmake_dataset with easier interface
-/*
-int h5md_write_attribute(){
-}
-*/
-
 int h5md_set_author(struct h5md_file* file, char* name, char* email_address){
 	H5Gcreate(file->file_id, "/author", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
 	herr_t status_name =-1;
 	int status_username_os =-1;
 	if(name == NULL){
-		char username[33];	//current (2014) standard username may be 32 characters long + 1 character for null termination
-		status_username_os=getlogin_r(username, sizeof(username));
+		char* username=getlogin();
 		status_name=H5LTset_attribute_string(file->file_id, "/author", "name", username);
 	}else{
 		status_name=H5LTset_attribute_string(file->file_id, "/author", "name", name);
@@ -598,6 +773,10 @@ int h5md_set_author(struct h5md_file* file, char* name, char* email_address){
 		return -1;	
 }
 
+
+//use H5LT http://www.hdfgroup.org/HDF5/hdf5_hl/doc/RM_hdf5lt.html#H5LTmake_dataset with easy interface
+
+
 //int h5md_set_version(struct h5md_file* file, char* name){
 
 //}
@@ -607,8 +786,37 @@ int h5md_delete_attribute(){
 
 }
 
-int h5md_copy_dataset(){
+int h5md_rename_dataset(){
 
 }
 */
+
+
+
+
+
+
+/* boring helper functions */
+char* concatenate_strings(const char* string1, const char* string2){
+	char* concat_string=malloc(strlen(string1)+strlen(string2)+1);	//+1 for 0 termination
+	concat_string=strcpy(concat_string, string1);
+	concat_string=strcat(concat_string, string2);
+	return concat_string;
+}
+
+int initialize_h5md_struct(struct h5md_file* file){
+	file->ngroups=0; //initialize the number of position datasets to 0
+	file->current_time=0;	//initialize current time to 0
+	file->groups=NULL;
+	return 0;
+}
+
+int max(int a, int b){
+	if(a>b)
+		return a;
+	else
+		return b;
+}
+
+
 

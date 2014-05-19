@@ -31,7 +31,8 @@ PARENT_DIR = $(shell dirname `pwd`)
 all : gtest_main.o libh5md_unittest
 
 # makes everything and runs the built sample test.
-check : all
+check : 
+	-$(MAKE)
 	-mkdir -p ./samples
 	-./libh5md_unittest
 
