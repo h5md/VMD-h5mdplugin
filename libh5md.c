@@ -275,13 +275,12 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 		*/
 		hsize_t offset_out[rank];
 		hsize_t count_out[rank];
-		if(i<1){
+		if(i<1){//set offset
 			offset_out[0]=0;
-			count_out[0]=file->natoms*file->groups[i].nspacedims;
 		}else{
 			offset_out[0]=previous_atoms*file->groups[i].nspacedims;
-			count_out[0]=offset_out[0]+file->groups[i].natoms_group*file->groups[i].nspacedims;		
 		}
+		count_out[0]=file->groups[i].natoms_group*file->groups[i].nspacedims;	
 		previous_atoms+=file->groups[i].natoms_group;
 		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
 		
