@@ -128,7 +128,7 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 
 		status=0;
 	}else{
-		printf("position datasets are not compatible");
+		printf("position datasets are not compatible\n");
 		status=-1;	
 	}
 	return status;
@@ -526,12 +526,11 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 		hsize_t count_out[rank];
 		if(i<1){
 			offset_out[0]=0;
-			count_out[0]=file->natoms;
 		}else{
 			offset_out[0]=previous_atoms;
-			count_out[0]=offset_out[0]+file->groups[i].natoms_group;		
 		}
-
+		count_out[0]=file->groups[i].natoms_group;
+		
 		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
 		
 
