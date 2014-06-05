@@ -183,7 +183,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	
 	int species_check = check_consistency_species_index_of_species(file, len_data_index_species, data_species);
 	if(species_check!=0){
-		printf("ERROR: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as different species are present in /particles/atoms/species !\n");
+		printf("ERROR: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as there are species present in the different groups /particles/*/species !\n");
 		printf("Skipping species related data.\n");
 	}else{
 		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name",(void**) &data_name, &type_class_name);
@@ -207,7 +207,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		int index_of_species=-1;
 		if(status_index_species==0 && status_read_species>=0)
 			index_of_species=find_index_of_species(data_index_species,data_species[i],len_data_index_species);
-
+			
 		if(status_read_type==0 && status_index_species==0)
 			strncpy(atom->type, data_type[index_of_species], 16*sizeof(char));	//set type for atom of species
 		else
@@ -223,7 +223,6 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		}else{
 			atom->atomicnumber = default_atomicnumber;
 		}
-
 		if (status_read_name==0 && status_index_species==0){
 			strncpy(atom->name,data_name[index_of_species],16*sizeof(char));	//set elementname for atom of species
 		}

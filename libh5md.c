@@ -92,7 +92,7 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 	free(full_path_position_dataset);
 
 	//get species_dataset_id
-	char* full_path_species_dataset=concatenate_strings((const char*) group_name,(const char*) "/species/value");	
+	char* full_path_species_dataset=concatenate_strings((const char*) group_name,(const char*) "/species");	
 	hid_t species_dataset_id=H5Dopen2(file->file_id, full_path_species_dataset ,H5P_DEFAULT);
 	free(full_path_species_dataset);
 
@@ -292,6 +292,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
 		H5Dread (file->groups[i].pos_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
 		H5Sclose(memspace_id); //close resources
+		H5Sclose(dataspace_id);
 	}
 
 	*coords=data_out;
@@ -494,7 +495,7 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 	//derived from h5md_get_timestep() above
 	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
-	int* data_out= malloc(sizeof(float)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
+	int* data_out= malloc(sizeof(int)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
@@ -504,8 +505,7 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 		* Define hyperslab in the dataset. 
 		*/
 		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
-		dataset_slab_offset[0] = previous_atoms;
-		previous_atoms+=file->groups[i].natoms_group;
+		dataset_slab_offset[0] = 0;
 		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
 		dataset_slab_count[0] = file->groups[i].natoms_group;
 		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
@@ -516,37 +516,33 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 		int rank=1; //linear data representation
 		hsize_t dimsm[rank];
 		dimsm[0]=file->natoms;
-
 		hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
-
+	
+	
 		/* 
 		* Define memory hyperslab. 
 		*/
 		hsize_t offset_out[rank];
 		hsize_t count_out[rank];
-		if(i<1){
-			offset_out[0]=0;
-		}else{
-			offset_out[0]=previous_atoms;
-		}
+		offset_out[0]=previous_atoms;
 		count_out[0]=file->groups[i].natoms_group;
 		
+		previous_atoms+=file->groups[i].natoms_group;
 		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
 		
 
 		/*
 		* Read data from hyperslab in the file into the hyperslab in memory
 		*/
-		
 		hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-		H5Dread (file->groups[i].species_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		herr_t status=H5Dread(file->groups[i].species_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
 		H5Sclose(memspace_id); //close resources
+		H5Sclose(dataspace_id);
 	}
 
 	*species_infromation_out=data_out;
 	
 	return 0;
-
 }
 
 /*int h5md_get_dataset_information_from_all_groups(struct h5md_file *file, char* relative_dataset_name , void** data_out){*/
