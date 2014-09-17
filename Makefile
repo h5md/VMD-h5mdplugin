@@ -27,14 +27,14 @@ all: h5mdtest libh5md.so h5mdplugin.so
 
 #nasty
 h5mdtest: h5mdtest.c h5mdplugin.so libh5md.so
-	$(CC) h5mdtest.c -o h5mdtest h5mdplugin.c $(VMDCPPFLAGS) -std=c99 $(LDFLAGS) $(HDF5LIBS) -lh5md -Wl,-rpath,$(shell pwd)
+	$(CC) h5mdtest.c -o h5mdtest h5mdplugin.c $(VMDCPPFLAGS) -std=c99 $(LDFLAGS) -Wl,-rpath,$(shell pwd) $(HDF5LIBS) -lh5md
 
 
 libh5md.so: libh5md.o
-	$(SHLD) $(CFLAGS) $(SHLDFLAGS) $(HDF5LIBS) $< -o libh5md.so
+	$(SHLD) $(CFLAGS) $(SHLDFLAGS) $< -o libh5md.so $(HDF5LIBS)
 
 h5mdplugin.so: h5mdplugin.o libh5md.so
-	$(SHLD) $(CFLAGS) $(SHLDFLAGS) $(LDLIBS) -lh5md -Wl,-rpath,$(shell pwd) $< -o h5mdplugin.so
+	$(SHLD) $(CFLAGS) $(SHLDFLAGS) -Wl,-rpath,$(shell pwd) $< -o h5mdplugin.so $(LDLIBS) -lh5md
 
 check:
 	cd tests && $(MAKE) check
