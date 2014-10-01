@@ -268,7 +268,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
 		dataset_slab_offset[0] = file->current_time;
 		dataset_slab_offset[1] = 0;
-		dataset_slab_offset[2]=0;
+		dataset_slab_offset[2] = 0;
 
 		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
 		dataset_slab_count[0] = 1;
@@ -337,7 +337,7 @@ int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
 
 // internally reads the box information of a given group into the memory
 h5md_box* get_box_information(struct h5md_file* file, int group_number){
-	h5md_box* boxes=malloc(sizeof(h5md_box)*file->ntime); //TODO needs correct free
+	h5md_box* boxes=malloc(sizeof(h5md_box)*file->ntime);
 
 	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
 	//try to open time-dependent box dataset, get box_dataset_timedependent_id
@@ -350,11 +350,24 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 	if(box_timedependent_dataset_id>0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
-		/*//TODO
-		for(int timestep; timestep<file->ntime; timestep++){
+
+		float data_box[file->ntime*3*3];
+		H5Dread(box_timedependent_dataset_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_box);
+		for(int i; i<file->ntime; i++){
+			h5md_box box;
+			double vector_a[3]={data_box[i*9+0], data_box[i*9+1], data_box[i*9+2]};
+			double vector_b[3]={data_box[i*9+3], data_box[i*9+4], data_box[i*9+5]};
+			double vector_c[3]={data_box[i*9+6], data_box[i*9+7], data_box[i*9+8]};
 			//process to angles and lengths
-		}*/
-		printf("Time dependent box datasets are not implemented yet.\n");
+			box.A=calculate_length_of_vector(vector_a,3);
+			box.B=calculate_length_of_vector(vector_b,3);
+			box.C=calculate_length_of_vector(vector_c,3);
+			box.alpha= calculate_angle_between_vectors(vector_b,vector_c,3);
+			box.beta= calculate_angle_between_vectors(vector_a,vector_c,3);
+			box.gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
+			boxes[i]=box;
+		}
+
 	}else{
 		if(box_timeindependent_dataset_id>0){
 			h5md_box box;
