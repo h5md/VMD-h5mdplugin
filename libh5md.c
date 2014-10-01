@@ -354,12 +354,11 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 		for(int timestep; timestep<file->ntime; timestep++){
 			//process to angles and lengths
 		}*/
-		printf("Time dependent boxdatasets are not implemented yet.\n");
+		printf("Time dependent box datasets are not implemented yet.\n");
 	}else{
 		if(box_timeindependent_dataset_id>0){
 			h5md_box box;
 			//read timeindependent dataset
-			
 			//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
 			int dims_box;
 			int is_cubic=h5md_get_length_of_one_dimensional_dataset(file, full_path_box_dataset_timedependent, &dims_box);
@@ -370,8 +369,6 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 			//process to angles and lengths			
 			if(is_cubic==0){
 				//box is cubic implies vector
-				printf("status cubic %d\n", status);
-				printf("box entry %d \n", data_box[3]);
 				box.A=data_box[0];
 				box.B=data_box[1];
 				box.C=data_box[2];
