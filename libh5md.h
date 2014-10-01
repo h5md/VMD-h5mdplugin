@@ -28,6 +28,9 @@ int h5md_seek_timestep(struct h5md_file* file, int i);
 // reads the next timestep of all groups, allocates coords and sets natoms to the number of atoms
 int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords);
 
+//reads all box informations of all groups, returns only the box information of the first group (since VMD doesn't support more than one box per file), the returned array has length 6 (3 lengths: A, B, C, and 3 angles alpha, beta, gamma)
+int h5md_get_box_information(struct h5md_file* file, float* out_box_information);
+
 //reads species information of all groups, allocates species_infromation_out
 int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infromation_out);
 
@@ -56,7 +59,6 @@ int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void
 
 //get length of one-dimensional dataset
 int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *dataset_name, int *length_of_dataset);
-
 
 /*write operations*/
 

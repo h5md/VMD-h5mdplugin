@@ -31,7 +31,7 @@ h5mdtest: h5mdtest.c h5mdplugin.so libh5md.so
 
 
 libh5md.so: libh5md.o
-	$(SHLD) $(CFLAGS) $(SHLDFLAGS) $< -o libh5md.so $(HDF5LIBS)
+	$(SHLD) $(CFLAGS) $(SHLDFLAGS) $< -o libh5md.so $(HDF5LIBS) -lm
 
 h5mdplugin.so: h5mdplugin.o libh5md.so
 	$(SHLD) $(CFLAGS) $(SHLDFLAGS) -Wl,-rpath,$(shell pwd) $< -o h5mdplugin.so $(LDLIBS) -lh5md

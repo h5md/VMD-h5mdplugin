@@ -8,23 +8,26 @@
 
 #include <libgen.h>	//for use of basename
 #include <unistd.h>	//for use of getlogin_r
+#include <math.h>	//for use of acos
 
 #define TRUE	1
 #define FALSE	0
+#define PI 3.14159265
 
 /*
 Return value 0 means everything is fine
 */
 
-//declaration of "private" functions, cannot be accessed from outside the library
-//declaration here in order to be able to sort the content of the file according to it's "importance"
-char* concatenate_strings(const char* string1,const char* string2);
-int modify_information_about_file_content(struct h5md_file* file, char* group_name);
-int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id);
-herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t* info, void* _file);
-//declaration of boring helper functions
-int initialize_h5md_struct(struct h5md_file* file);
-int max(int a, int b);
+//box information
+typedef struct h5md_box{
+	float A;
+	float B;
+	float C;
+	float alpha;
+	float beta;
+	float gamma;
+} h5md_box;
+
 
 //group handling
 typedef struct h5md_group{
@@ -40,9 +43,8 @@ typedef struct h5md_group{
 	hid_t dataspace;
 	int rank_dataset;
 	int nspacedims;
-
+	h5md_box* boxes;
 } h5md_group;
-
 
 //file handling
 struct h5md_file{
@@ -55,6 +57,19 @@ struct h5md_file{
 	int current_time;	//for h5md_seek_timestep()
 };
 
+//declaration of "private" functions, cannot be accessed from outside the library
+//declaration here in order to be able to sort the content of the file according to it's "importance"
+int initialize_h5md_struct(struct h5md_file* file);
+int modify_information_about_file_content(struct h5md_file* file, char* group_name);
+int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id);
+herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t* info, void* _file);
+h5md_box* get_box_information(struct h5md_file* file, int group_number);
+
+//declaration of boring helper functions
+char* concatenate_strings(const char* string1,const char* string2);
+int max(int a, int b);
+float calculate_length_of_vector(double* vector, int dimensions);
+float calculate_angle_between_vectors(double* vector1, double* vector2, int dimensions);
 
 int discover_all_groups(struct h5md_file* file){
 	H5Lvisit(file->file_id, H5_INDEX_NAME, H5_ITER_NATIVE, check_for_pos_dataset, (void*) file);	//discover all groups with position datasets
@@ -82,7 +97,6 @@ herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t
 	return status;	//if status is 0 search for other position datasets continues. If status is negative, search is aborted.
 }
 
-
 int modify_information_about_file_content(struct h5md_file* file, char* group_name){
 	int status=-1;
 	
@@ -98,7 +112,6 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 
 	if(check_compatibility(file, pos_dataset_id)==0){
 		file->ngroups+=1;
-
 		h5md_group* groups=(h5md_group*) realloc(file->groups, sizeof(h5md_group)*(file->ngroups));	//effectively appends one entry to array
 
 		groups[file->ngroups-1].pos_dataset_id=pos_dataset_id;
@@ -122,9 +135,12 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 		file->natoms += dims_out[1];
 		groups[file->ngroups-1].nspacedims = dims_out[2];
 		groups[file->ngroups-1].natoms_group=dims_out[1];
-	
+		groups[file->ngroups-1].group_path=group_name;
 
-		file->groups=groups;
+
+		file->groups=groups; // assign file->groups here since get_box_information() uses all group_path entries
+		file->groups[file->ngroups-1].boxes=get_box_information(file, file->ngroups-1);
+		//file->groups=groups;
 
 		status=0;
 	}else{
@@ -133,6 +149,8 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 	}
 	return status;
 }
+
+
 
 int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id){
 	hid_t new_dataspace = H5Dget_space(new_pos_dataset_id);	//dataspace handle
@@ -146,9 +164,6 @@ int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id){
 	else
 		return -1;
 }
-
-
-
 
 // opens the file, creates the internal structure and goes to the first timestep
 // you have to use double pointers in order to be able to change a pointer in a foreing function
@@ -320,6 +335,105 @@ int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
 	return status_read;
 }
 
+// internally reads the box information of a given group into the memory
+h5md_box* get_box_information(struct h5md_file* file, int group_number){
+	h5md_box* boxes=malloc(sizeof(h5md_box)*file->ntime); //TODO needs correct free
+
+	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
+	//try to open time-dependent box dataset, get box_dataset_timedependent_id
+	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/value");	
+	hid_t box_timedependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timedependent ,H5P_DEFAULT);
+	//try to open time-independent box dataset, get box_dataset_timeindependent_id
+	char* full_path_box_dataset_timeindependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/edges");	
+	hid_t box_timeindependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timeindependent ,H5P_DEFAULT);
+
+	if(box_timedependent_dataset_id>0){
+		//timedependent dataset exists, use it
+		//read timedependent dataset 
+		/*//TODO
+		for(int timestep; timestep<file->ntime; timestep++){
+			//process to angles and lengths
+		}*/
+		printf("Time dependent boxdatasets are not implemented yet.\n");
+	}else{
+		if(box_timeindependent_dataset_id>0){
+			h5md_box box;
+			//read timeindependent dataset
+			
+			//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
+			int dims_box;
+			int is_cubic=h5md_get_length_of_one_dimensional_dataset(file, full_path_box_dataset_timedependent, &dims_box);
+			float* data_box;
+			H5T_class_t box_class_out;
+			int status=h5md_read_timeindependent_dataset_automatically(file, full_path_box_dataset_timeindependent,(void**) &data_box, &box_class_out);
+			
+			//process to angles and lengths			
+			if(is_cubic==0){
+				//box is cubic implies vector
+				printf("status cubic %d\n", status);
+				printf("box entry %d \n", data_box[3]);
+				box.A=data_box[0];
+				box.B=data_box[1];
+				box.C=data_box[2];
+				box.alpha=90;
+				box.beta=90;
+				box.gamma=90;
+			}else{
+				//box is triclinic implies matrix
+				//VMD expects system to be 3dimensional -> assume 3x3 matrix
+				double vector_a[3]={data_box[0],data_box[1],data_box[2]};
+				double vector_b[3]={data_box[3],data_box[4],data_box[5]};
+				double vector_c[3]={data_box[6],data_box[7],data_box[8]};
+				
+				//according to VMD's molfile_timestep_t documentation
+				box.A=calculate_length_of_vector(vector_a,3);
+				box.B=calculate_length_of_vector(vector_b,3);
+				box.C=calculate_length_of_vector(vector_c,3);
+				box.alpha= calculate_angle_between_vectors(vector_b,vector_c,3);
+				box.beta= calculate_angle_between_vectors(vector_a,vector_c,3);
+				box.gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
+			}
+
+
+			//copy timeindependend dataset ntimes
+			for(int i=0; i<file->ntime; i++){
+				boxes[i]=box;
+			}
+		}else{
+			printf("No box information found");	
+		}
+	}
+
+	
+	free(full_path_box_dataset_timedependent);
+	free(full_path_box_dataset_timeindependent);
+
+	return boxes; //TODO make correct
+
+}
+
+int free_box_information(struct h5md_file* file){
+	for(int i=0;i<file->ngroups;i++){
+		free(file->groups[i].boxes);	
+	}
+	return 0;
+}
+
+
+int h5md_get_box_information(struct h5md_file* file, float* out_box_information){
+	//only use information of first group (file->groups[0]...) since VMD only supports one box
+	out_box_information[0]=file->groups[0].boxes[file->current_time].A;
+	out_box_information[1]=file->groups[0].boxes[file->current_time].B;
+	out_box_information[2]=file->groups[0].boxes[file->current_time].C;
+	out_box_information[3]=file->groups[0].boxes[file->current_time].alpha;
+	out_box_information[4]=file->groups[0].boxes[file->current_time].beta;
+	out_box_information[5]=file->groups[0].boxes[file->current_time].gamma;
+	if(file->current_time>=file->ntime) //free box information
+		free_box_information(file);
+	return 0;
+}
+
+
 
 //read timeindependent dataset automatically
 int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out){
@@ -339,11 +453,12 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 	H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
 
 	if(dataset_id<0){
-		printf("Dataset %s could not be opened.\n", dataset_name);
+		//printf("Dataset %s could not be opened.\n", dataset_name);
 		status=-1;
 	}else{
 		switch (*type_class_out) {
 		case H5T_INTEGER:{
+			hid_t wanted_memory_datatype = H5T_NATIVE_INT;			
 			//determine needed size
 			int needed_size=dims_dataset[0];
 			int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
@@ -357,6 +472,7 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 			}
 		break;
 		case H5T_FLOAT:{
+			hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
 			//determine needed size
 			int needed_size=dims_dataset[0];
 			int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
@@ -364,7 +480,7 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 				needed_size*=dims_dataset[i];
 			}
 			float* data_out=(float*) malloc(sizeof(size_datatype)*needed_size);
-			int status_read=H5Dread(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+			int status_read=H5Dread(dataset_id, wanted_memory_datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
 			status=status_read;
 			*(_data_out)=data_out;
 			}
@@ -469,7 +585,7 @@ int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *data
 		*length_of_dataset=dims_dataset[0];
 		return 0;
 	}else{
-		printf("Dataset %s is not one dimensional.\n", dataset_name);	
+		//printf("Dataset %s is not one dimensional.\n", dataset_name);	
 		return -1;	
 	}
 }
@@ -741,7 +857,10 @@ int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset){
 }
 
 int h5md_set_author(struct h5md_file* file, char* name, char* email_address){
-	H5Gcreate(file->file_id, "/author", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	hid_t link_crt_plist = H5Pcreate(H5P_LINK_CREATE);
+	H5Pset_create_intermediate_group(link_crt_plist, TRUE);	// Set flag for intermediate group creation
+
+	H5Gcreate(file->file_id, "/h5md/author", link_crt_plist, H5P_DEFAULT, H5P_DEFAULT);
 
 	herr_t status_name =-1;
 	int status_username_os =-1;
@@ -809,6 +928,43 @@ int max(int a, int b){
 		return a;
 	else
 		return b;
+}
+
+float calculate_length_of_vector(double* vector, int dimensions){
+	float length=0.0;
+	for(int i=0;i<dimensions;i++){
+	length+=vector[i]*vector[i];
+	}
+	length=sqrt(length);
+	return length;
+}
+
+//returns 0 if "vector" is the zero vector, otherwise nonzero
+int is_zero_vector(double* vector, int dimensions){
+	float absolute_error=0.00001;
+	int number_of_nonzero_entries=0;
+	for(int i=0;i<dimensions;i++){
+		if(fabs(vector[i]-0)>absolute_error){
+				number_of_nonzero_entries+=1;
+				break;
+		}	
+	}
+	return number_of_nonzero_entries;
+}
+
+float calculate_angle_between_vectors(double* vector1, double* vector2, int dimensions){
+	if(is_zero_vector(vector1, dimensions)==0 || is_zero_vector(vector2, dimensions)==0){
+		printf("Error: Cannot calculate angle to the zero vector which has length 0\n");
+		return -1.0;
+	}
+	float angle=0.0;
+	for(int i=0;i<dimensions;i++){
+		angle+=vector1[i]*vector2[i];	
+	}
+	float len_vector1=calculate_length_of_vector(vector1, dimensions);
+	float len_vector2=calculate_length_of_vector(vector2, dimensions);
+	angle=acos(angle/(len_vector1*len_vector2))*180/PI;	//*180/PI converts radian to degree
+	return angle;
 }
 
 

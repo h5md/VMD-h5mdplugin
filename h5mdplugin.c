@@ -52,8 +52,6 @@ const float default_charge= 0.0;
 const float default_radius= 0.5;
 const int default_atomicnumber= 1;
 
-
-
 static void *open_h5md_read(const char *filename, const char *filetype, int *natoms){
 	h5md_hide_hdf5_error_messages();
 	struct h5md_file* file;
@@ -67,12 +65,21 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 /* read the coordinates */
 static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	struct h5md_file* file=_file;
+	float box_information[6];
+	h5md_get_box_information(file, box_information);
 	if (ts != NULL ) { //skip reading if ts is NULL pointer
 		int status_read_timestep=h5md_read_timestep(file, natoms, ts->coords);
 		if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
 	}
+	//add boxinformation
+	ts->A=box_information[0];
+	ts->B=box_information[1];
+	ts->C=box_information[2];
+	ts->alpha=box_information[3];
+	ts->beta=box_information[4];
+	ts->gamma=box_information[5];
 	return MOLFILE_SUCCESS;
 }
 
@@ -188,7 +195,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	}else{
 		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name",(void**) &data_name, &type_class_name);
 		status_read_type=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/type",(void**) &data_type, &type_class_type);
-		status_read_mass=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/mass",(void**) &data_mass, &type_class_mass);
+		status_read_mass=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/mass",(void**) &data_mass, &type_class_mass); //TODO remove from vmd_structure, read from particle group
 		status_read_radius=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/radius",(void**) &data_radius, &type_class_radius);
 		status_read_atomicnumber=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/atomicnumber",(void**) &data_atomicnumber, &type_class_atomicnumber);
 	}
