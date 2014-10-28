@@ -410,7 +410,7 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 				boxes[i]=box;
 			}
 		}else{
-			printf("No box information found");	
+			printf("No box information found\n");	
 		}
 	}
 
@@ -418,7 +418,7 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 	free(full_path_box_dataset_timedependent);
 	free(full_path_box_dataset_timeindependent);
 
-	return boxes; //TODO make correct
+	return boxes;
 
 }
 

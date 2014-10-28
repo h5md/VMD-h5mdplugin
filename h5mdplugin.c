@@ -65,21 +65,24 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 /* read the coordinates */
 static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	struct h5md_file* file=_file;
-	float box_information[6];
-	h5md_get_box_information(file, box_information);
 	if (ts != NULL ) { //skip reading if ts is NULL pointer
+		//read boxinformation
+		float box_information[6];
+		h5md_get_box_information(file, box_information);
+		ts->A=box_information[0];
+		ts->B=box_information[1];
+		ts->C=box_information[2];
+		ts->alpha=box_information[3];
+		ts->beta=box_information[4];
+		ts->gamma=box_information[5];
+
+		//read coords
 		int status_read_timestep=h5md_read_timestep(file, natoms, ts->coords);
 		if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
 	}
-	//add boxinformation
-	ts->A=box_information[0];
-	ts->B=box_information[1];
-	ts->C=box_information[2];
-	ts->alpha=box_information[3];
-	ts->beta=box_information[4];
-	ts->gamma=box_information[5];
+
 	return MOLFILE_SUCCESS;
 }
 
