@@ -52,6 +52,7 @@ int h5md_get_ntime(struct h5md_file* file, int* ntime);
 //read time-independent dataset automatically
 int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out);
 
+//read time-independent integer dataset automatically
 int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_name, int** _data_out);
 
 //free time-independent dataset automatically

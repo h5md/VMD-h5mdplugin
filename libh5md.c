@@ -399,9 +399,9 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 				box.A=calculate_length_of_vector(vector_a,3);
 				box.B=calculate_length_of_vector(vector_b,3);
 				box.C=calculate_length_of_vector(vector_c,3);
-				box.alpha= calculate_angle_between_vectors(vector_b,vector_c,3);
-				box.beta= calculate_angle_between_vectors(vector_a,vector_c,3);
-				box.gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
+				box.alpha=calculate_angle_between_vectors(vector_b,vector_c,3);
+				box.beta=calculate_angle_between_vectors(vector_a,vector_c,3);
+				box.gamma=calculate_angle_between_vectors(vector_a,vector_b,3);
 			}
 
 
