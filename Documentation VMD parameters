@@ -37,5 +37,4 @@ The end atom of bond number i is saved in the i-th row of /parameters/vmd_struct
 	   float charge; -> per atom		/parameters/vmd_structure/charge      
 	   float radius; -> per species		/parameters/vmd_structure/radius       
 	   int atomicnumber; (allowed in range 0 to 112) -> per species	/parameters/vmd_structure/atomicnumber
-	   
-  
+

@@ -66,8 +66,11 @@ int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *data
 //creates a h5 file and sets the author (if not overwritten later, the username of the currently logged in user is used) and saves the reference to this bare file in a h5md_file struct, fails if a file with the provided filename already exists
 int h5md_create_file(struct h5md_file **_file, const char* filename);
 
-//sets the author's name and email. if name==NULL then the username of the currently logged in user is used, if email_address==NULL, then no email adress is written
+//sets the author's name and email. if name==NULL then the username of the currently logged in user is used, if email_address==NULL, then it is remarked, that no email was provided
 int h5md_set_author(struct h5md_file* file, char* name, char* email_address);
+
+//sets the creator program name and version. if name==NULL then the string "libh5md" is set. If version==NULL, then it is remarked, that no version was provided
+int h5md_set_creator(struct h5md_file* file, char* name, char* version);
 
 //deletes a file
 int h5md_delete_file(char* filename);

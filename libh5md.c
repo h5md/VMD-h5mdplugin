@@ -35,7 +35,8 @@ typedef struct h5md_group{
 	int natoms_group;
 	hid_t pos_dataset_id;
 	hid_t species_dataset_id;
-	int* atom_ids;	//TODO use it
+	hid_t image_dataset_id;
+	hid_t id_dataset_id;
 	hid_t datatype;
 	H5T_class_t t_class;
 	H5T_order_t order;
@@ -105,10 +106,21 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 	hid_t pos_dataset_id=H5Dopen2(file->file_id, full_path_position_dataset ,H5P_DEFAULT);
 	free(full_path_position_dataset);
 
-	//get species_dataset_id
+	//get species_dataset_id for timeindependent species dataset (a timedependent dataset would be located under /species/value)
 	char* full_path_species_dataset=concatenate_strings((const char*) group_name,(const char*) "/species");	
 	hid_t species_dataset_id=H5Dopen2(file->file_id, full_path_species_dataset ,H5P_DEFAULT);
 	free(full_path_species_dataset);
+
+	//get image_dataset_id
+	char* full_path_image_dataset=concatenate_strings((const char*) group_name,(const char*) "/image/value");	
+	hid_t image_dataset_id=H5Dopen2(file->file_id, full_path_image_dataset ,H5P_DEFAULT);
+	free(full_path_image_dataset);
+
+	//get id_dataset_id
+	char* full_path_id_dataset=concatenate_strings((const char*) group_name,(const char*) "/id/value");	
+	hid_t id_dataset_id=H5Dopen2(file->file_id, full_path_id_dataset ,H5P_DEFAULT);
+	free(full_path_id_dataset);
+
 
 	if(check_compatibility(file, pos_dataset_id)==0){
 		file->ngroups+=1;
@@ -116,7 +128,9 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 
 		groups[file->ngroups-1].pos_dataset_id=pos_dataset_id;
 		groups[file->ngroups-1].species_dataset_id=species_dataset_id;		
-	
+		groups[file->ngroups-1].image_dataset_id=image_dataset_id;
+		groups[file->ngroups-1].id_dataset_id=id_dataset_id;
+
 		/*
 		* Get datatype and dataspace handles and then query
 		* dataset class, order, size, rank and dimensions. Since all datasets are checked to be compatible do this only for the first dataset
@@ -138,7 +152,7 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 		groups[file->ngroups-1].group_path=group_name;
 
 
-		file->groups=groups; // assign file->groups here since get_box_information() uses all group_path entries
+		file->groups=groups; // assign file->groups here since get_box_information() uses all group_path entries, get_box_information can then be called later
 		file->groups[file->ngroups-1].boxes=get_box_information(file, file->ngroups-1);
 		//file->groups=groups;
 
@@ -194,6 +208,8 @@ int h5md_close(struct h5md_file* file){
 			for(int i=0; i<file->ngroups; i++){//close datasets
 				H5Dclose(file->groups[i].pos_dataset_id);
 				H5Dclose(file->groups[i].species_dataset_id);
+				H5Dclose(file->groups[i].image_dataset_id);
+				H5Dclose(file->groups[i].id_dataset_id);
 			}
 			free(file->groups);
 		}
@@ -243,7 +259,7 @@ int h5md_get_current_time(struct h5md_file* file, int* current_time){
 int h5md_seek_timestep(struct h5md_file* file, int i){
 	int ntime;
 	h5md_get_ntime(file,&ntime);
-	if(i<=ntime){
+	if(i<ntime){
 		file->current_time=i;
 		return 0;
 	}else{
@@ -252,6 +268,55 @@ int h5md_seek_timestep(struct h5md_file* file, int i){
 }
 
 
+//declare struct for binary tree node in order to assign a particle with an id to the correct index in the current position dataset, assumes that the position dataset and the image dataset have the same ordering
+typedef struct _idmapper_node{
+	int id;
+	int current_index_in_dataset;
+	struct _idmapper_node* left;
+	struct _idmapper_node* right;
+}idmapper_node;
+
+
+idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_dataset){
+	if(root==NULL){
+		root=(idmapper_node*) malloc(sizeof(idmapper_node));
+		root->id=id;
+		root->current_index_in_dataset=current_index_in_dataset;
+		root->left=NULL;
+		root->right=NULL;	
+	}else if(id<root->id){
+		root->left=insert_id(root->left,id,current_index_in_dataset);
+	}else if(id>root->id){
+		root->right=insert_id(root->right,id,current_index_in_dataset);
+	}else{
+		printf("ERROR: id dataset is not unique\n");
+		return NULL;	
+	}
+	return root;
+}
+
+int search_current_index_of_particle_id(idmapper_node* root, int id){
+	int current_index_of_particle_id;
+	if(root==NULL){
+		printf("ERROR: no correct root provided\n");
+		return -1;
+	}else if(id<root->id){
+		current_index_of_particle_id= search_current_index_of_particle_id(root->left,id);
+	}else if(id>root->id){
+		current_index_of_particle_id= search_current_index_of_particle_id(root->right,id);
+	}else if(root->id==id){
+		current_index_of_particle_id= root->current_index_in_dataset;
+	}
+	return current_index_of_particle_id;
+}
+
+void free_binary_tree_idmapper(idmapper_node* root){
+	if(root!=NULL){
+		free_binary_tree_idmapper(root->left);
+		free_binary_tree_idmapper(root->right);
+		free(root);	
+	}
+}
 
 // reads the next timestep, allocates coords and sets natoms to the number of atoms
 int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
@@ -260,7 +325,10 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
-		hid_t dataspace_id=H5Dget_space(file->groups[i].pos_dataset_id); //Define dataset dataspace in file.
+		/////////////////
+		//read in positions of group
+		float data_out_local_pos[3*file->groups[i].natoms_group];
+		hid_t dataspace_pos_id=H5Dget_space(file->groups[i].pos_dataset_id); //Define dataset dataspace (for pos_dataset) in file.
 
 		/* 
 		* Define hyperslab in the dataset. 
@@ -274,7 +342,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 		dataset_slab_count[0] = 1;
 		dataset_slab_count[1] = file->groups[i].natoms_group;
 		dataset_slab_count[2] = file->groups[i].nspacedims;
-		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+		H5Sselect_hyperslab(dataspace_pos_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
 	
 		/*
 		* Define memory dataspace.
@@ -290,24 +358,166 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 		*/
 		hsize_t offset_out[rank];
 		hsize_t count_out[rank];
-		if(i<1){//set offset
-			offset_out[0]=0;
-		}else{
-			offset_out[0]=previous_atoms*file->groups[i].nspacedims;
-		}
+		offset_out[0]=0;
 		count_out[0]=file->groups[i].natoms_group*file->groups[i].nspacedims;	
-		previous_atoms+=file->groups[i].natoms_group;
 		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
 		
 
 		/*
 		* Read data from hyperslab in the file into the hyperslab in memory
 		*/
-		
 		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
-		H5Dread (file->groups[i].pos_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		H5Dread (file->groups[i].pos_dataset_id, wanted_memory_datatype, memspace_id, dataspace_pos_id, H5P_DEFAULT, data_out_local_pos); 
 		H5Sclose(memspace_id); //close resources
-		H5Sclose(dataspace_id);
+		H5Sclose(dataspace_pos_id);
+		
+		/////////////////
+		//read in image_data of group
+		int data_out_local_image[file->groups[i].natoms_group];
+		if(file->groups[i].image_dataset_id>0){
+			hid_t dataspace_image_id=H5Dget_space(file->groups[i].image_dataset_id); //Define dataset dataspace (for image_dataset) in file.
+
+			/* 
+			* Define hyperslab in the dataset. 
+			*/
+			dataset_slab_offset[2];
+			dataset_slab_offset[0] = file->current_time;
+			dataset_slab_offset[1] = 0;
+
+			dataset_slab_count[2];
+			dataset_slab_count[0] = 1;
+			dataset_slab_count[1] = file->groups[i].natoms_group;
+			H5Sselect_hyperslab(dataspace_image_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+	
+			/*
+			* Define memory dataspace.
+			*/
+			int rank=1; //linear data representation
+			hsize_t dimsm[rank];
+			dimsm[0]=file->natoms;
+
+			hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+
+			/* 
+			* Define memory hyperslab. 
+			*/
+			hsize_t offset_out[rank];
+			hsize_t count_out[rank];
+			offset_out[0]=0;
+			count_out[0]=file->groups[i].natoms_group;	
+			H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+		
+
+			/*
+			* Read data from hyperslab in the file into the hyperslab in memory
+			*/
+			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
+			H5Dread (file->groups[i].image_dataset_id, wanted_memory_datatype, memspace_id, dataspace_image_id, H5P_DEFAULT, data_out_local_image); 
+			H5Sclose(memspace_id); //close resources
+			H5Sclose(dataspace_image_id);
+			
+			
+			
+			//////////////
+			//get box_vectors, not using box_information form get_box, since projection of 3 box vectors (9 variables) to only 3 angles and 3 length has inheritent loss of information (only 6 variables)
+			float vector_a[3];
+			float vector_b[3];
+			float vector_c[3];
+			get_box_vectors(file, i, file->current_time, vector_a,vector_b,vector_c);
+			
+			//use image_data to calculate absolute positions
+			for(int i=0; i< file->groups[i].natoms_group;i=i+3){
+				data_out_local_pos[i]=data_out_local_pos[i]+vector_a[0]*data_out_local_image[i]+vector_b[0]*data_out_local_image[i+1]+vector_c[0]*data_out_local_image[i+2];
+				data_out_local_pos[i+1]=data_out_local_pos[i+1]+vector_a[1]*data_out_local_image[i]+vector_b[1]*data_out_local_image[i+1]+vector_c[1]*data_out_local_image[i+2];
+				data_out_local_pos[i+2]=data_out_local_pos[i+2]+vector_a[2]*data_out_local_image[i]+vector_b[2]*data_out_local_image[i+1]+vector_c[2]*data_out_local_image[i+2];
+			}
+			
+		}else{
+			//nothing to do with data_out if no box information is present
+		}
+
+
+
+		
+		/////////////////
+		//read in id_data of group
+		if(file->groups[i].id_dataset_id>0){
+			int data_out_local_id[file->groups[i].natoms_group];
+			hid_t dataspace_id_id=H5Dget_space(file->groups[i].id_dataset_id); //Define dataset dataspace (for id_dataset) in file.
+
+			/* 
+			* Define hyperslab in the dataset. 
+			*/
+			dataset_slab_offset[2];
+			dataset_slab_offset[0] = file->current_time;
+			dataset_slab_offset[1] = 0;
+
+			dataset_slab_count[2];
+			dataset_slab_count[0] = 1;
+			dataset_slab_count[1] = file->groups[i].natoms_group;
+			H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+	
+			/*
+			* Define memory dataspace.
+			*/
+			int rank=1; //linear data representation
+			hsize_t dimsm[rank];
+			dimsm[0]=file->natoms;
+
+			hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+
+			/* 
+			* Define memory hyperslab. 
+			*/
+			hsize_t offset_out[rank];
+			hsize_t count_out[rank];
+			offset_out[0]=0;
+			count_out[0]=file->groups[i].natoms_group;	
+			H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+		
+
+			/*
+			* Read data from hyperslab in the file into the hyperslab in memory
+			*/
+			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
+			H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
+			H5Sclose(memspace_id); //close resources
+			H5Sclose(dataspace_id_id);
+			
+			//use id data to sort particle positions (use binary tree)
+		
+			//create binary tree
+			idmapper_node* root=NULL;
+			for(int particle_i=0;particle_i<file->groups[i].natoms_group;particle_i++){
+				if(particle_i==0){
+					//save root of tree
+					root=insert_id(root,data_out_local_id[particle_i],particle_i);			
+				}else{
+					insert_id(root,data_out_local_id[particle_i],particle_i);
+				}
+			}
+			//sort data_out_local_pos using the binary tree		
+			float _data_out_local_pos_sorted[3*file->groups[i].natoms_group];
+			for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
+				int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
+				//printf("particle with id %d has current index %d at current time %d\n", particle_id, current_index_of_particle_id, file->current_time);
+				_data_out_local_pos_sorted[3*particle_id+0]=data_out_local_pos[3*current_index_of_particle_id+0];
+				_data_out_local_pos_sorted[3*particle_id+1]=data_out_local_pos[3*current_index_of_particle_id+1];
+				_data_out_local_pos_sorted[3*particle_id+2]=data_out_local_pos[3*current_index_of_particle_id+2];
+			}
+			//write sorted data back to data_out_local_pos
+			for(int j=0;j<3*file->groups[i].natoms_group;j++){
+				data_out_local_pos[j]=_data_out_local_pos_sorted[j];
+			}
+			free_binary_tree_idmapper(root);
+						
+
+		}
+
+		//memcpy to data_out
+		memcpy(&data_out[3*previous_atoms], data_out_local_pos,sizeof(float)*3*file->groups[i].natoms_group);
+		previous_atoms+=file->groups[i].natoms_group; 
+		
 	}
 
 	*coords=data_out;
@@ -326,7 +536,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 }
 
 
-// reads the next timestep and writes the data to coords (for which the memory has been allocated externally before the call of this function) iff natoms is the number of atoms in the timestep
+// reads the next timestep and writes the data to coords (for which the memory has been allocated externally before the call of this function) iff natoms is the number of atoms in the timestep.
 int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
 	float* data_out_temp;
 	int status_read =h5md_get_timestep(file, &natoms, (float**) &(data_out_temp));
@@ -335,29 +545,107 @@ int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
 	return status_read;
 }
 
-// internally reads the box information of a given group into the memory
-h5md_box* get_box_information(struct h5md_file* file, int group_number){
-	h5md_box* boxes=malloc(sizeof(h5md_box)*file->ntime);
-
+//internally reads box_vectors of group_i at time_i into memory. If the dataset is not timedependent, then time_i is ignored.
+//memory for the box vectors has to be allocated in advance, it is implicitly assumed that the box is three dimensional.
+int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vector_a, float* vector_b, float* vector_c){
 	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
 	//try to open time-dependent box dataset, get box_dataset_timedependent_id
-	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/value");	
+	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_i].group_path,(const char*) "/box/value");	
 	hid_t box_timedependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timedependent ,H5P_DEFAULT);
+
 	//try to open time-independent box dataset, get box_dataset_timeindependent_id
-	char* full_path_box_dataset_timeindependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/edges");	
+	char* full_path_box_dataset_timeindependent=concatenate_strings((const char*) file->groups[group_i].group_path,(const char*) "/box/edges");	
 	hid_t box_timeindependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timeindependent ,H5P_DEFAULT);
 
 	if(box_timedependent_dataset_id>0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
-
 		float data_box[file->ntime*3*3];
 		H5Dread(box_timedependent_dataset_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_box);
-		for(int i; i<file->ntime; i++){
+		vector_a[0]=data_box[time_i*9+0];
+		vector_a[1]=data_box[time_i*9+1];
+		vector_a[2]=data_box[time_i*9+2];
+		vector_b[0]=data_box[time_i*9+3];
+		vector_b[1]=data_box[time_i*9+4];
+		vector_b[2]=data_box[time_i*9+5];
+		vector_c[0]=data_box[time_i*9+6];
+		vector_c[1]=data_box[time_i*9+7];
+		vector_c[2]=data_box[time_i*9+8];
+		
+	}else if(box_timeindependent_dataset_id>0){
+		//read timeindependent dataset
+		//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
+		int dims_box;
+		int is_cubic=h5md_get_length_of_one_dimensional_dataset(file, full_path_box_dataset_timedependent, &dims_box);
+		float* data_box;
+		H5T_class_t box_class_out;
+		h5md_read_timeindependent_dataset_automatically(file, full_path_box_dataset_timeindependent,(void**) &data_box, &box_class_out);
+		if(is_cubic==0){
+			//box is cubic implies vector
+			vector_a[0]=data_box[0];
+			vector_a[1]=0;
+			vector_a[2]=0;
+			vector_b[0]=0;
+			vector_b[1]=data_box[1];
+			vector_b[2]=0;
+			vector_c[0]=0;
+			vector_c[1]=0;
+			vector_c[2]=data_box[2];
+		}else{
+			//box is triclinic implies matrix
+			//VMD expects system to be 3dimensional -> assume 3x3 matrix
+			vector_a[0]=data_box[0];
+			vector_a[1]=data_box[1];
+			vector_a[2]=data_box[2];
+			vector_b[0]=data_box[3];
+			vector_b[1]=data_box[4];
+			vector_b[2]=data_box[5];
+			vector_c[0]=data_box[6];
+			vector_c[1]=data_box[7];
+			vector_c[2]=data_box[8];
+		}
+	}else{
+		//printf("No box information found\n");
+		vector_a[0]=0;
+		vector_a[1]=0;
+		vector_a[2]=0;
+		vector_b[0]=0;
+		vector_b[1]=0;
+		vector_b[2]=0;
+		vector_c[0]=0;
+		vector_c[1]=0;
+		vector_c[2]=0;	
+	}
+	free(full_path_box_dataset_timeindependent);
+	free(full_path_box_dataset_timedependent);
+	return 0;
+
+}
+
+// internally reads the box information of a given group into the memory
+h5md_box* get_box_information(struct h5md_file* file, int group_number){
+	h5md_box* boxes=malloc(sizeof(h5md_box)*file->ntime);
+	
+	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
+	//try to open time-dependent box dataset, get box_dataset_timedependent_id
+	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/value");	
+	hid_t box_timedependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timedependent ,H5P_DEFAULT);
+	free(full_path_box_dataset_timedependent);
+
+	//try to open time-independent box dataset, get box_dataset_timeindependent_id
+	char* full_path_box_dataset_timeindependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/edges");	
+	hid_t box_timeindependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timeindependent ,H5P_DEFAULT);
+	free(full_path_box_dataset_timeindependent);
+
+	if(box_timedependent_dataset_id>0){
+		//timedependent dataset exists, use it
+		//read timedependent dataset 
+		for(int time_i; time_i<file->ntime; time_i++){
 			h5md_box box;
-			double vector_a[3]={data_box[i*9+0], data_box[i*9+1], data_box[i*9+2]};
-			double vector_b[3]={data_box[i*9+3], data_box[i*9+4], data_box[i*9+5]};
-			double vector_c[3]={data_box[i*9+6], data_box[i*9+7], data_box[i*9+8]};
+			float vector_a[3];
+			float vector_b[3];
+			float vector_c[3];
+			get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
 			//process to angles and lengths
 			box.A=calculate_length_of_vector(vector_a,3);
 			box.B=calculate_length_of_vector(vector_b,3);
@@ -365,49 +653,30 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 			box.alpha= calculate_angle_between_vectors(vector_b,vector_c,3);
 			box.beta= calculate_angle_between_vectors(vector_a,vector_c,3);
 			box.gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
-			boxes[i]=box;
+			boxes[time_i]=box;
 		}
 
 	}else{
 		if(box_timeindependent_dataset_id>0){
 			h5md_box box;
+			int time_i=FALSE;
 			//read timeindependent dataset
 			//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
-			int dims_box;
-			int is_cubic=h5md_get_length_of_one_dimensional_dataset(file, full_path_box_dataset_timedependent, &dims_box);
-			float* data_box;
-			H5T_class_t box_class_out;
-			int status=h5md_read_timeindependent_dataset_automatically(file, full_path_box_dataset_timeindependent,(void**) &data_box, &box_class_out);
-			
-			//process to angles and lengths			
-			if(is_cubic==0){
-				//box is cubic implies vector
-				box.A=data_box[0];
-				box.B=data_box[1];
-				box.C=data_box[2];
-				box.alpha=90;
-				box.beta=90;
-				box.gamma=90;
-			}else{
-				//box is triclinic implies matrix
-				//VMD expects system to be 3dimensional -> assume 3x3 matrix
-				double vector_a[3]={data_box[0],data_box[1],data_box[2]};
-				double vector_b[3]={data_box[3],data_box[4],data_box[5]};
-				double vector_c[3]={data_box[6],data_box[7],data_box[8]};
-				
-				//according to VMD's molfile_timestep_t documentation
-				box.A=calculate_length_of_vector(vector_a,3);
-				box.B=calculate_length_of_vector(vector_b,3);
-				box.C=calculate_length_of_vector(vector_c,3);
-				box.alpha=calculate_angle_between_vectors(vector_b,vector_c,3);
-				box.beta=calculate_angle_between_vectors(vector_a,vector_c,3);
-				box.gamma=calculate_angle_between_vectors(vector_a,vector_b,3);
-			}
-
-
-			//copy timeindependend dataset ntimes
-			for(int i=0; i<file->ntime; i++){
-				boxes[i]=box;
+			float vector_a[3];
+			float vector_b[3];
+			float vector_c[3];
+			get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
+			//according to VMD's molfile_timestep_t documentation
+			//process to angles and lengths		
+			box.A=calculate_length_of_vector(vector_a,3);
+			box.B=calculate_length_of_vector(vector_b,3);
+			box.C=calculate_length_of_vector(vector_c,3);
+			box.alpha=calculate_angle_between_vectors(vector_b,vector_c,3);
+			box.beta=calculate_angle_between_vectors(vector_a,vector_c,3);
+			box.gamma=calculate_angle_between_vectors(vector_a,vector_b,3);
+			//copy timeindependent box ntimes
+			for(int time_i=0; time_i<file->ntime; time_i++){
+				boxes[time_i]=box;
 			}
 		}else{
 			printf("No box information found\n");	
@@ -415,9 +684,6 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 	}
 
 	
-	free(full_path_box_dataset_timedependent);
-	free(full_path_box_dataset_timeindependent);
-
 	return boxes;
 
 }
@@ -476,7 +742,7 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 				needed_size*=dims_dataset[i];
 			}
 			int* data_out=(int*) malloc(sizeof(size_datatype)*needed_size);
-			int status_read=H5Dread(dataset_id, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+			int status_read=H5Dread(dataset_id, wanted_memory_datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
 			status=status_read;
 			*(_data_out)=data_out;
 			}
@@ -661,7 +927,7 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 		* Read data from hyperslab in the file into the hyperslab in memory
 		*/
 		hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-		herr_t status=H5Dread(file->groups[i].species_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		H5Dread(file->groups[i].species_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
 		H5Sclose(memspace_id); //close resources
 		H5Sclose(dataspace_id);
 	}
@@ -686,6 +952,7 @@ int h5md_create_file(struct h5md_file **_file, const char* filename){
 	hid_t file_id = H5Fcreate(filename, H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT); //H5F_ACC_EXCL <-> fail if file already exists, alternative H5F_ACC_TRUNC <-> overwrite file
 	file->file_id=file_id;
 	h5md_set_author(file, NULL, NULL); //sets author name by default to the user account name, can be overwritten by another call of h5md_set_author(file,"username");
+	h5md_set_creator(file, NULL, NULL);
 	*(_file)=file;
 	if(file_id<0){
 		printf("ERROR: A file with this filename already exists.\n");
@@ -873,22 +1140,47 @@ int h5md_set_author(struct h5md_file* file, char* name, char* email_address){
 	H5Gcreate(file->file_id, "/h5md/author", link_crt_plist, H5P_DEFAULT, H5P_DEFAULT);
 
 	herr_t status_name =-1;
-	int status_username_os =-1;
 	if(name == NULL){
 		char* username=getlogin();
-		status_name=H5LTset_attribute_string(file->file_id, "/author", "name", username);
+		status_name=H5LTset_attribute_string(file->file_id, "/h5md/author", "name", username);
 	}else{
-		status_name=H5LTset_attribute_string(file->file_id, "/author", "name", name);
+		status_name=H5LTset_attribute_string(file->file_id, "/h5md/author", "name", name);
 	}
 	
 	int status_email =-1;
 	if(email_address==NULL){
-		status_email=H5LTset_attribute_string(file->file_id, "/author", "email", "email was not provided");
+		status_email=H5LTset_attribute_string(file->file_id, "/h5md/author", "email", "email was not provided");
 	}else{
-		status_email=H5LTset_attribute_string(file->file_id, "/author", "email", email_address);	
+		status_email=H5LTset_attribute_string(file->file_id, "/h5md/author", "email", email_address);	
 	}
 
-	if( (status_name>0 || status_username_os==0) && status_email>0 )
+	if( status_name>0 && status_email>0 )
+		return 0;	
+	else
+		return -1;	
+}
+
+int h5md_set_creator(struct h5md_file* file, char* name, char* version){
+	hid_t link_crt_plist = H5Pcreate(H5P_LINK_CREATE);
+	H5Pset_create_intermediate_group(link_crt_plist, TRUE);	// Set flag for intermediate group creation
+
+	H5Gcreate(file->file_id, "/h5md/creator", link_crt_plist, H5P_DEFAULT, H5P_DEFAULT);
+
+	herr_t status_name =-1;
+	if(name == NULL){
+		status_name=H5LTset_attribute_string(file->file_id, "/h5md/creator", "name", "libh5md");
+	}else{
+		status_name=H5LTset_attribute_string(file->file_id, "/h5md/creator", "name", name);
+	}
+	
+	int status_version =-1;
+	if(version==NULL){
+		status_version=H5LTset_attribute_string(file->file_id, "/h5md/creator", "version", "version not provided");
+	}else{
+		status_version=H5LTset_attribute_string(file->file_id, "/h5md/creator", "version", version);	
+	}
+
+	if(status_name>0  && status_version>0 )
 		return 0;	
 	else
 		return -1;	
