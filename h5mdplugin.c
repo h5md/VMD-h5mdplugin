@@ -61,7 +61,6 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 }
 
 
-
 /* read the coordinates */
 static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	struct h5md_file* file=_file;
@@ -78,7 +77,11 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 
 		//read coords
 		int status_read_timestep=h5md_read_timestep(file, natoms, ts->coords);
-		if(status_read_timestep!=0){
+		int correction_timestep=h5md_get_correction_for_VMD_counting_timesteps(file); // correct for VMD starting to count timesteps from 1 onwards, while h5mdplugin counts timesteps from 0 onwards
+		if(status_read_timestep!=0 && correction_timestep == 0){
+			h5md_set_correction_for_VMD_counting_timesteps(file);
+        		return MOLFILE_SUCCESS;
+        	}else if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
 	}

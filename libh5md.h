@@ -87,6 +87,8 @@ int get_fill_value(struct h5md_file* file, char* absolute_name_of_dataset, void*
 //deletes a dataset
 int h5md_delete_dataset(struct h5md_file* file, char* absolute_name_of_dataset);
 
-
+/* correction for VMD counting timesteps from 1 onwards */
+int h5md_set_correction_for_VMD_counting_timesteps(struct h5md_file* file);
+int h5md_get_correction_for_VMD_counting_timesteps(struct h5md_file* file);
 
 #endif

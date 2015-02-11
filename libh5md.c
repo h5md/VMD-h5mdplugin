@@ -56,6 +56,7 @@ struct h5md_file{
 	int ntime;
 	char *last_error_message;
 	int current_time;	//for h5md_seek_timestep()
+	int correction_timestep_VMD_counting;
 };
 
 //declaration of "private" functions, cannot be accessed from outside the library
@@ -259,7 +260,7 @@ int h5md_get_current_time(struct h5md_file* file, int* current_time){
 int h5md_seek_timestep(struct h5md_file* file, int i){
 	int ntime;
 	h5md_get_ntime(file,&ntime);
-	if(i<ntime){
+	if(i>=0 && i<ntime){
 		file->current_time=i;
 		return 0;
 	}else{
@@ -288,7 +289,7 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 		root->left=insert_id(root->left,id,current_index_in_dataset);
 	}else if(id>root->id){
 		root->right=insert_id(root->right,id,current_index_in_dataset);
-	}else{
+	}else if(id==root->id){
 		printf("ERROR: id dataset is not unique\n");
 		return NULL;	
 	}
@@ -298,7 +299,7 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 int search_current_index_of_particle_id(idmapper_node* root, int id){
 	int current_index_of_particle_id;
 	if(root==NULL){
-		printf("ERROR: no correct root provided\n");
+		printf("ERROR: id not found in tree or no correct root provided\n");
 		return -1;
 	}else if(id<root->id){
 		current_index_of_particle_id= search_current_index_of_particle_id(root->left,id);
@@ -500,7 +501,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 			float _data_out_local_pos_sorted[3*file->groups[i].natoms_group];
 			for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
 				int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
-				//printf("particle with id %d has current index %d at current time %d\n", particle_id, current_index_of_particle_id, file->current_time);
+				//printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, data_out_local_pos[3*current_index_of_particle_id+0]);
 				_data_out_local_pos_sorted[3*particle_id+0]=data_out_local_pos[3*current_index_of_particle_id+0];
 				_data_out_local_pos_sorted[3*particle_id+1]=data_out_local_pos[3*current_index_of_particle_id+1];
 				_data_out_local_pos_sorted[3*particle_id+2]=data_out_local_pos[3*current_index_of_particle_id+2];
@@ -1222,7 +1223,16 @@ int initialize_h5md_struct(struct h5md_file* file){
 	file->ngroups=0; //initialize the number of position datasets to 0
 	file->current_time=0;	//initialize current time to 0
 	file->groups=NULL;
+	file->correction_timestep_VMD_counting=0;
 	return 0;
+}
+
+int h5md_set_correction_for_VMD_counting_timesteps(struct h5md_file* file){
+	file->correction_timestep_VMD_counting=1;
+}
+
+int h5md_get_correction_for_VMD_counting_timesteps(struct h5md_file* file){
+	return file->correction_timestep_VMD_counting;
 }
 
 int max(int a, int b){
