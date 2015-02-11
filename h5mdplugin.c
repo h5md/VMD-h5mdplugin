@@ -84,6 +84,12 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
         	}else if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
+        	//XXX error when loading two files in VMD has to do with code here. The following code instead of the above does not produce error, but does not read last timestep in file 
+/*        	if(status_read_timestep!=0 ){*/
+/*			h5md_set_correction_for_VMD_counting_timesteps(file);*/
+/*        		return MOLFILE_SUCCESS;*/
+/*        	}*/
+        	
 	}
 
 	return MOLFILE_SUCCESS;
@@ -311,7 +317,7 @@ static int h5md_get_bonds(void *_file, int *nbonds, int **from, int **to, float 
 	int status_read_bond_from=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_from",(void**) from, &type_class_bond_from);
 	int status_read_bond_to=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_to",(void**) to, &type_class_bond_to);
 	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/bond_from",nbonds); //save number of bonds to *nbonds
-	if(status_read_bond_from==0 && status_read_bond_to ==0){
+	if(status_read_bond_from==0 && status_read_bond_to ==0){ 
   		return MOLFILE_SUCCESS;
 	}else{
 		return MOLFILE_ERROR;		

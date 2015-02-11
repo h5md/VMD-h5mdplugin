@@ -70,8 +70,8 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number);
 //declaration of boring helper functions
 char* concatenate_strings(const char* string1,const char* string2);
 int max(int a, int b);
-float calculate_length_of_vector(double* vector, int dimensions);
-float calculate_angle_between_vectors(double* vector1, double* vector2, int dimensions);
+float calculate_length_of_vector(float* vector, int dimensions);
+float calculate_angle_between_vectors(float* vector1, float* vector2, int dimensions);
 
 int discover_all_groups(struct h5md_file* file){
 	H5Lvisit(file->file_id, H5_INDEX_NAME, H5_ITER_NATIVE, check_for_pos_dataset, (void*) file);	//discover all groups with position datasets
@@ -1242,7 +1242,7 @@ int max(int a, int b){
 		return b;
 }
 
-float calculate_length_of_vector(double* vector, int dimensions){
+float calculate_length_of_vector(float* vector, int dimensions){
 	float length=0.0;
 	for(int i=0;i<dimensions;i++){
 	length+=vector[i]*vector[i];
@@ -1252,7 +1252,7 @@ float calculate_length_of_vector(double* vector, int dimensions){
 }
 
 //returns 0 if "vector" is the zero vector, otherwise nonzero
-int is_zero_vector(double* vector, int dimensions){
+int is_zero_vector(float* vector, int dimensions){
 	float absolute_error=0.00001;
 	int number_of_nonzero_entries=0;
 	for(int i=0;i<dimensions;i++){
@@ -1264,7 +1264,7 @@ int is_zero_vector(double* vector, int dimensions){
 	return number_of_nonzero_entries;
 }
 
-float calculate_angle_between_vectors(double* vector1, double* vector2, int dimensions){
+float calculate_angle_between_vectors(float* vector1, float* vector2, int dimensions){
 	if(is_zero_vector(vector1, dimensions)==0 || is_zero_vector(vector2, dimensions)==0){
 		printf("Error: Cannot calculate angle to the zero vector which has length 0\n");
 		return -1.0;
