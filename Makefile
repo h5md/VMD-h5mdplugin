@@ -2,8 +2,8 @@
 VMDDIR=/usr/local/lib/vmd
 
 # Where the HDF5 library is installed
-HDF5LDFLAGS=-L/usr/lib64
-HDF5CPPFLAGS=-I/usr/include
+HDF5LDFLAGS=-L/usr/lib64 -L/home/jakub/.local/hdf5/lib
+HDF5CPPFLAGS=-I/usr/include -I/home/jakub/.local/hdf5/include
 
 # Which libraries to use
 HDF5LIBS=-lhdf5_hl -lhdf5
@@ -12,7 +12,7 @@ HDF5LIBSCplusplus=-lhdf5_cpp -lhdf5
 # Location of the VMD include files vmdplugin.h and molfile_plugin.h.
 # Typically, these files can be found in the subdir 
 # plugins/include of the VMD installation directory.
-VMDCPPFLAGS=-I$(VMDDIR)/plugins/include 
+VMDCPPFLAGS=-I$(VMDDIR)/plugins/include $(HDF5LDFLAGS) $(HDF5CPPFLAGS)
 
 CC=gcc
 #compiler switches http://gcc.gnu.org/onlinedocs/gcc-3.4.3/gnat_ugn_unw/Switches-for-gcc.html
