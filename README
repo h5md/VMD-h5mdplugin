@@ -10,4 +10,5 @@ directory to where you have compiled it):
 
         vmd_plugin_scandirectory /PATH_TO_SO_DIRECTORY/ h5mdplugin.so
 
-Remarks: the plugin only works with threedimensional position datasets.
+Remark 1: the plugin only works with threedimensional position datasets.
+Remark 2: the files libh5md.c and libh5md.h provide common C routines to read and write H5MD files. The library is licensed under GPLv3. 
