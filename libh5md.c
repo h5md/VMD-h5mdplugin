@@ -173,7 +173,6 @@ int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id){
 	hsize_t dims_out[new_rank_dataset];
 	H5Sget_simple_extent_dims(new_dataspace, dims_out, NULL);
 	int ntime_new_pos_dataset =(int) dims_out[0];
-
 	if(file->ntime==ntime_new_pos_dataset || (file->ngroups==0 && new_pos_dataset_id>0))	//ngroups=0 from initialization
 		return 0;
 	else
@@ -1207,9 +1206,6 @@ int h5md_rename_dataset(){
 
 
 
-
-
-
 /* boring helper functions */
 
 char* concatenate_strings(const char* string1, const char* string2){
@@ -1223,6 +1219,9 @@ int initialize_h5md_struct(struct h5md_file* file){
 	file->ngroups=0; //initialize the number of position datasets to 0
 	file->current_time=0;	//initialize current time to 0
 	file->groups=NULL;
+	file->ntime=0;
+	file->last_error_message="";
+	file->natoms=0;
 	file->correction_timestep_VMD_counting=0;
 	return 0;
 }

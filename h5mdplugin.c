@@ -84,12 +84,6 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
         	}else if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
-        	//XXX error when loading two files in VMD has to do with code here. The following code instead of the above does not produce error, but does not read last timestep in file 
-/*        	if(status_read_timestep!=0 ){*/
-/*			h5md_set_correction_for_VMD_counting_timesteps(file);*/
-/*        		return MOLFILE_SUCCESS;*/
-/*        	}*/
-        	
 	}
 
 	return MOLFILE_SUCCESS;
