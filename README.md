@@ -15,9 +15,9 @@ high-performance parallel I/O, and portability.
 **H5MD files are created** by these simulation packages:
 
   - [HAL’s MD package](http://halmd.org)
+  - [ESPResSo](http://espressomd.org)
   - [LAMMPS](http://lammps.sandia.gov)
     ([h5md dump style](https://github.com/pdebuyl/lammps/tree/start_dump_h5md/src/USER-H5MD))
-  - [ESPResSo](http://espressomd.org)
 
 Find out about more [H5MD-related software](http://nongnu.org/h5md/software.html).
 
