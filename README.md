@@ -17,7 +17,7 @@ high-performance parallel I/O, and portability.
   - [HAL’s MD package](http://halmd.org)
   - [LAMMPS](http://lammps.sandia.gov)
     ([h5md dump style](https://github.com/pdebuyl/lammps/tree/start_dump_h5md/src/USER-H5MD))
-  - [ESPResSo](http://espressomd.org) (under development)
+  - [ESPResSo](http://espressomd.org)
 
 Find out about more [H5MD-related software](http://nongnu.org/h5md/software.html).
 
