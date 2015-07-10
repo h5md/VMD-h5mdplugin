@@ -64,7 +64,7 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 /* read the coordinates */
 static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	struct h5md_file* file=_file;
-	if (ts != NULL ) { //skip reading if ts is NULL pointer
+	if (ts != NULL ) { //skip reading if ts is NULL pointer (needs modification of the timestep below)
 		//read boxinformation
 		float box_information[6];
 		h5md_get_box_information(file, box_information);
@@ -74,7 +74,8 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 		ts->alpha=box_information[3];
 		ts->beta=box_information[4];
 		ts->gamma=box_information[5];
-
+		ts->velocities = NULL;
+		ts->physical_time = 0.0;
 		//read coords
 		int status_read_timestep=h5md_read_timestep(file, natoms, ts->coords);
 		int correction_timestep=h5md_get_correction_for_VMD_counting_timesteps(file); // correct for VMD starting to count timesteps from 1 onwards, while h5mdplugin counts timesteps from 0 onwards
@@ -84,12 +85,10 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
         	}else if(status_read_timestep!=0){
         		return MOLFILE_ERROR;
         	}
-        	//XXX error when loading two files in VMD has to do with code here. The following code instead of the above does not produce error, but does not read last timestep in file 
-/*        	if(status_read_timestep!=0 ){*/
-/*			h5md_set_correction_for_VMD_counting_timesteps(file);*/
-/*        		return MOLFILE_SUCCESS;*/
-/*        	}*/
-        	
+	} else {
+		int current_time;
+		h5md_get_current_time(file,&current_time);
+		h5md_seek_timestep(file, current_time+1); //modify timestep in the internal state of the plugin for this file	
 	}
 
 	return MOLFILE_SUCCESS;

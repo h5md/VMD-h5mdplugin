@@ -1,7 +1,0 @@
-To compile the plugin, adapt the Makefile and run "make". This should work on any Unix that has VMD and HDF5 installed. For example under Ubuntu you need the package libhdf5-dev and the VMD sources.
-
-To load the plugin in VMD add the following line to your ~/.vmdrc (replace the directory to where you have compiled it):
-
-        vmd_plugin_scandirectory /PATH_TO_SO_DIRECTORY/ h5mdplugin.so
-        
-Remarks: the plugin only works with threedimensional position datasets.

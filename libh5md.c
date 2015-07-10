@@ -173,7 +173,6 @@ int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id){
 	hsize_t dims_out[new_rank_dataset];
 	H5Sget_simple_extent_dims(new_dataspace, dims_out, NULL);
 	int ntime_new_pos_dataset =(int) dims_out[0];
-
 	if(file->ntime==ntime_new_pos_dataset || (file->ngroups==0 && new_pos_dataset_id>0))	//ngroups=0 from initialization
 		return 0;
 	else
@@ -551,7 +550,7 @@ int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
 int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vector_a, float* vector_b, float* vector_c){
 	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
 	//try to open time-dependent box dataset, get box_dataset_timedependent_id
-	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_i].group_path,(const char*) "/box/value");	
+	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_i].group_path,(const char*) "/box/edges/value");	
 	hid_t box_timedependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timedependent ,H5P_DEFAULT);
 
 	//try to open time-independent box dataset, get box_dataset_timeindependent_id
@@ -561,7 +560,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 	if(box_timedependent_dataset_id>0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
-		float data_box[file->ntime*3*3];
+		float *data_box = malloc(file->ntime*3*3*sizeof(float));
 		H5Dread(box_timedependent_dataset_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_box);
 		vector_a[0]=data_box[time_i*9+0];
 		vector_a[1]=data_box[time_i*9+1];
@@ -572,7 +571,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 		vector_c[0]=data_box[time_i*9+6];
 		vector_c[1]=data_box[time_i*9+7];
 		vector_c[2]=data_box[time_i*9+8];
-		
+		free (data_box);
 	}else if(box_timeindependent_dataset_id>0){
 		//read timeindependent dataset
 		//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
@@ -629,7 +628,7 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 	
 	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
 	//try to open time-dependent box dataset, get box_dataset_timedependent_id
-	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/value");	
+	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_number].group_path,(const char*) "/box/edges/value");	
 	hid_t box_timedependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timedependent ,H5P_DEFAULT);
 	free(full_path_box_dataset_timedependent);
 
@@ -641,7 +640,7 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 	if(box_timedependent_dataset_id>0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
-		for(int time_i; time_i<file->ntime; time_i++){
+		for(int time_i=0; time_i<file->ntime; time_i++){
 			h5md_box box;
 			float vector_a[3];
 			float vector_b[3];
@@ -1207,9 +1206,6 @@ int h5md_rename_dataset(){
 
 
 
-
-
-
 /* boring helper functions */
 
 char* concatenate_strings(const char* string1, const char* string2){
@@ -1223,6 +1219,9 @@ int initialize_h5md_struct(struct h5md_file* file){
 	file->ngroups=0; //initialize the number of position datasets to 0
 	file->current_time=0;	//initialize current time to 0
 	file->groups=NULL;
+	file->ntime=0;
+	file->last_error_message="";
+	file->natoms=0;
 	file->correction_timestep_VMD_counting=0;
 	return 0;
 }
