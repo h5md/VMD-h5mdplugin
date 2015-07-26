@@ -56,5 +56,5 @@ Remarks
 
 
 Examples
--------
+--------
 ![Example of the representation of a h5md file in VMD](https://lists.gnu.org/archive/html/h5md-user/2013-08/pngf5euRoAsmj.png =100x)
