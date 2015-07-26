@@ -57,4 +57,5 @@ Remarks
 
 Examples
 --------
+Example h5md files can be found in the folder "samples".
 ![Example of the representation of a h5md file in VMD](https://lists.gnu.org/archive/html/h5md-user/2013-08/pngf5euRoAsmj.png)
