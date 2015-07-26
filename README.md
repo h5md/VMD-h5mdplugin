@@ -53,7 +53,8 @@ Remarks
     provides common C routines to read and write H5MD files. This library is
     licensed under GPLv3.
   - In order to make full usage of VMD (for example to make VMDs output more "colourful") you need to specify the dataset /parameters/vmd_structure in your h5md file, the documentation for this dataset can be found in the file "Documentation VMD parameters".
-  - 
-  Examples
-----------
-![Example of the representation of a h5md file in VMD](https://lists.gnu.org/archive/html/h5md-user/2013-08/pngf5euRoAsmj.png)
+
+
+Examples
+-------
+![Example of the representation of a h5md file in VMD](https://lists.gnu.org/archive/html/h5md-user/2013-08/pngf5euRoAsmj.png =100x)
