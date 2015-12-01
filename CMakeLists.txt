@@ -5,7 +5,7 @@ set(CMAKE_USER_MAKE_RULES_OVERRIDE "cmake/platform.cmake")
 
 project(VMD-h5mdplugin C)
 
-find_package(HDF5 REQUIRED)
+find_package(HDF5 REQUIRED COMPONENTS "C" "HL")
 # find_package(VMD REQUIRED)
 # FIXME e.g., https://github.com/gromacs/gromacs/blob/master/cmake/FindVMD.cmake
 set(GMX_VMD_PLUGIN_PATH "$ENV{VMDDIR}/plugins/include" CACHE STRING "Path to VMD plugin headers")
@@ -28,8 +28,7 @@ add_library(h5mdplugin SHARED
     h5mdplugin.c
 )
 target_link_libraries(h5md
-    ${HDF5_LIBRARY}
-    ${HDF5_HL_LIBRARY}
+    ${HDF5_LIBRARIES}
     # math library
     m
 )
@@ -39,8 +38,7 @@ set_target_properties(h5mdplugin PROPERTIES PREFIX "")
 
 target_link_libraries(h5mdplugin
     h5md
-    ${HDF5_LIBRARY}
-    ${HDF5_HL_LIBRARY}
+    ${HDF5_LIBRARIES}
 )
 
 install(TARGETS h5mdplugin
@@ -58,8 +56,7 @@ add_executable(h5mdtest
 )
 target_link_libraries(h5mdtest
     h5md
-    ${HDF5_LIBRARY}
-    ${HDF5_HL_LIBRARY}
+    ${HDF5_LIBRARIES}
     # math library
     m
 )
