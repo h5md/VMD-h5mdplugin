@@ -307,16 +307,22 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 
 
 static int h5md_get_bonds(void *_file, int *nbonds, int **from, int **to, float **bondorder, int **bondtype,  int *nbondtypes, char ***bondtypename){
+	*bondorder = NULL;
 	*bondtype=NULL;
 	*nbondtypes=0;
 	bondtypename=NULL;
 	struct h5md_file* file=_file; 
 	H5T_class_t type_class_bond_from;
 	H5T_class_t type_class_bond_to;
+	
+	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/bond_from",nbonds); //save number of bonds to *nbonds
+	
+	
 	int status_read_bond_from=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_from",(void**) from, &type_class_bond_from);
 	int status_read_bond_to=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/bond_to",(void**) to, &type_class_bond_to);
-	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/bond_from",nbonds); //save number of bonds to *nbonds
+	
 	if(status_read_bond_from==0 && status_read_bond_to ==0){ 
+		printf("read %d bonds \n",*nbonds);
   		return MOLFILE_SUCCESS;
 	}else{
 		return MOLFILE_ERROR;		

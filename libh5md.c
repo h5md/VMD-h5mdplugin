@@ -737,6 +737,7 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 			int status_read=H5Dread(dataset_id, wanted_memory_datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
 			status=status_read;
 			*(_data_out)=data_out;
+			
 			}
 		break;
 		case H5T_FLOAT:{
@@ -836,7 +837,7 @@ int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_
 	H5T_class_t type_class_out;
 	int status_read=h5md_read_timeindependent_dataset_automatically(file, dataset_name, (void**)_data_out, &type_class_out);
 
-	if( (status_read!=0) || (type_class_out =! H5Tget_class(H5T_NATIVE_INT)))
+	if( (status_read!=0) )
 		return -1;
 	else
 		return 0;
