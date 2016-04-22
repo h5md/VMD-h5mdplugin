@@ -146,7 +146,7 @@ int check_consistency_species_index_of_species(struct h5md_file *file, int len_d
 //load whole VMD structure
 int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t *atoms) {
 	molfile_atom_t *atom;
-	*optflags = MOLFILE_ATOMICNUMBER | MOLFILE_MASS | MOLFILE_RADIUS;
+	*optflags = MOLFILE_ATOMICNUMBER | MOLFILE_MASS | MOLFILE_RADIUS |  MOLFILE_INSERTION | MOLFILE_CHARGE; // we read the optional attributes atomicnumber, mass, radius and charge
 	struct h5md_file* file=_file;
 
 	//load index of species
