@@ -165,6 +165,17 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	int* data_species;
 	H5T_class_t type_class_species=H5T_INTEGER;
 	int status_read_species=h5md_get_all_species_infromation(file, (int**) &data_species);
+	
+	//load mass
+	float* data_mass;
+	H5T_class_t type_class_mass=H5T_FLOAT;
+	int status_read_mass=h5md_get_all_mass_infromation(file, (float**) &data_mass);
+		
+	//load charge
+	float* data_charge;
+	H5T_class_t type_class_charge=H5T_FLOAT;
+	int status_read_charge=h5md_get_all_charge_infromation(file, (float**) &data_charge);
+	
 	//Declaring variables here since if one would declare them later in the else branch one could not access them to free them later, after the atoms have been assigned to their values
 	char **data_name;
 	int status_read_name=-1;
@@ -172,18 +183,12 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	char **data_type;
 	int status_read_type=-1;
 	H5T_class_t type_class_type;
-	float* data_mass;
-	H5T_class_t type_class_mass;
-	int status_read_mass=-1;
 	float* data_radius;
 	H5T_class_t type_class_radius;
 	int status_read_radius=-1;
 	int* data_atomicnumber;
 	H5T_class_t type_class_atomicnumber;
 	int status_read_atomicnumber=-1;	
-	float* data_charge;
-	int status_read_charge=-1;
-	H5T_class_t type_class_charge;	
 	char** data_segid;
 	int status_read_segid=-1;
 	H5T_class_t type_class_segid;
@@ -206,11 +211,9 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	}else{
 		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name",(void**) &data_name, &type_class_name);
 		status_read_type=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/type",(void**) &data_type, &type_class_type);
-		status_read_mass=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/mass",(void**) &data_mass, &type_class_mass); //TODO remove from vmd_structure, read from particle group
 		status_read_radius=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/radius",(void**) &data_radius, &type_class_radius);
 		status_read_atomicnumber=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/atomicnumber",(void**) &data_atomicnumber, &type_class_atomicnumber);
 	}
-	status_read_charge=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/charge",(void**) &data_charge, &type_class_charge);
 	status_read_segid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/segid",(void**) &data_segid, &type_class_segid);
 	//load resid
 	status_read_resid=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/resid",(void**) &data_resid, &type_class_resid);

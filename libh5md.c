@@ -35,6 +35,8 @@ typedef struct h5md_group{
 	int natoms_group;
 	hid_t pos_dataset_id;
 	hid_t species_dataset_id;
+	hid_t mass_dataset_id;
+	hid_t charge_dataset_id;
 	hid_t image_dataset_id;
 	hid_t id_dataset_id;
 	hid_t datatype;
@@ -66,6 +68,8 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id);
 herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t* info, void* _file);
 h5md_box* get_box_information(struct h5md_file* file, int group_number);
+int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vector_a, float* vector_b, float* vector_c);
+
 
 //declaration of boring helper functions
 char* concatenate_strings(const char* string1,const char* string2);
@@ -111,6 +115,16 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 	char* full_path_species_dataset=concatenate_strings((const char*) group_name,(const char*) "/species");	
 	hid_t species_dataset_id=H5Dopen2(file->file_id, full_path_species_dataset ,H5P_DEFAULT);
 	free(full_path_species_dataset);
+	
+	//get mass_dataset_id for timeindependent mass dataset (a timedependent dataset would be located under /mass/value)
+	char* full_path_mass_dataset=concatenate_strings((const char*) group_name,(const char*) "/mass");	
+	hid_t mass_dataset_id=H5Dopen2(file->file_id, full_path_mass_dataset ,H5P_DEFAULT);
+	free(full_path_mass_dataset);
+	
+	//get charge_dataset_id for timeindependent charge dataset (a timedependent dataset would be located under /charge/value)
+	char* full_path_charge_dataset=concatenate_strings((const char*) group_name,(const char*) "/charge");	
+	hid_t charge_dataset_id=H5Dopen2(file->file_id, full_path_charge_dataset ,H5P_DEFAULT);
+	free(full_path_charge_dataset);
 
 	//get image_dataset_id
 	char* full_path_image_dataset=concatenate_strings((const char*) group_name,(const char*) "/image/value");
@@ -129,6 +143,8 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 
 		groups[file->ngroups-1].pos_dataset_id=pos_dataset_id;
 		groups[file->ngroups-1].species_dataset_id=species_dataset_id;
+		groups[file->ngroups-1].mass_dataset_id=mass_dataset_id;
+		groups[file->ngroups-1].charge_dataset_id=charge_dataset_id;
 		groups[file->ngroups-1].image_dataset_id=image_dataset_id;
 		groups[file->ngroups-1].id_dataset_id=id_dataset_id;
 
@@ -209,6 +225,8 @@ int h5md_close(struct h5md_file* file){
 				H5Dclose(file->groups[i].pos_dataset_id);
 				H5Dclose(file->groups[i].species_dataset_id);
 				H5Dclose(file->groups[i].image_dataset_id);
+				H5Dclose(file->groups[i].mass_dataset_id);
+				H5Dclose(file->groups[i].charge_dataset_id);
 				H5Dclose(file->groups[i].id_dataset_id);
 			}
 			free(file->groups);
@@ -380,11 +398,11 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 			/* 
 			* Define hyperslab in the dataset. 
 			*/
-			dataset_slab_offset[2];
+			dataset_slab_offset[2] = 0;
 			dataset_slab_offset[0] = file->current_time;
 			dataset_slab_offset[1] = 0;
 
-			dataset_slab_count[2];
+			dataset_slab_count[2] =0 ;
 			dataset_slab_count[0] = 1;
 			dataset_slab_count[1] = file->groups[i].natoms_group;
 			H5Sselect_hyperslab(dataspace_image_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
@@ -445,11 +463,11 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 			/* 
 			* Define hyperslab in the dataset. 
 			*/
-			dataset_slab_offset[2];
+			dataset_slab_offset[2] = 0;
 			dataset_slab_offset[0] = file->current_time;
 			dataset_slab_offset[1] = 0;
 
-			dataset_slab_count[2];
+			dataset_slab_count[2] = 0;
 			dataset_slab_count[0] = 1;
 			dataset_slab_count[1] = file->groups[i].natoms_group;
 			H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
@@ -925,9 +943,115 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 	}
 
 	*species_infromation_out=data_out;
-
 	return 0;
 }
+
+
+int h5md_get_all_mass_infromation(struct h5md_file *file, float** mass_infromation_out){
+	//derived from h5md_get_timestep() above
+	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
+
+	float* data_out= malloc(sizeof(float)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
+
+	int previous_atoms=0;
+	for(int i=0; i<file->ngroups; i++){//go through all groups
+		hid_t dataspace_id=H5Dget_space(file->groups[i].mass_dataset_id); //Define dataset dataspace in file.
+
+		/* 
+		* Define hyperslab in the dataset. 
+		*/
+		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+		dataset_slab_offset[0] = 0;
+		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		dataset_slab_count[0] = file->groups[i].natoms_group;
+		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+
+		/*
+		* Define memory dataspace.
+		*/
+		int rank=1; //linear data representation
+		hsize_t dimsm[rank];
+		dimsm[0]=file->natoms;
+		hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+
+		/* 
+		* Define memory hyperslab. 
+		*/
+		hsize_t offset_out[rank];
+		hsize_t count_out[rank];
+		offset_out[0]=previous_atoms;
+		count_out[0]=file->groups[i].natoms_group;
+
+		previous_atoms+=file->groups[i].natoms_group;
+		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+
+
+		/*
+		* Read data from hyperslab in the file into the hyperslab in memory
+		*/
+		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
+		H5Dread(file->groups[i].mass_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		H5Sclose(memspace_id); //close resources
+		H5Sclose(dataspace_id);
+	}
+
+	*mass_infromation_out=data_out;
+	return 0;
+}
+
+int h5md_get_all_charge_infromation(struct h5md_file *file, float** charge_infromation_out){
+	//derived from h5md_get_timestep() above
+	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
+
+	float* data_out= malloc(sizeof(float)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
+
+	int previous_atoms=0;
+	for(int i=0; i<file->ngroups; i++){//go through all groups
+		hid_t dataspace_id=H5Dget_space(file->groups[i].charge_dataset_id); //Define dataset dataspace in file.
+
+		/* 
+		* Define hyperslab in the dataset. 
+		*/
+		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+		dataset_slab_offset[0] = 0;
+		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		dataset_slab_count[0] = file->groups[i].natoms_group;
+		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+
+		/*
+		* Define memory dataspace.
+		*/
+		int rank=1; //linear data representation
+		hsize_t dimsm[rank];
+		dimsm[0]=file->natoms;
+		hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+
+		/* 
+		* Define memory hyperslab. 
+		*/
+		hsize_t offset_out[rank];
+		hsize_t count_out[rank];
+		offset_out[0]=previous_atoms;
+		count_out[0]=file->groups[i].natoms_group;
+
+		previous_atoms+=file->groups[i].natoms_group;
+		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+
+
+		/*
+		* Read data from hyperslab in the file into the hyperslab in memory
+		*/
+		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
+		H5Dread(file->groups[i].charge_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		H5Sclose(memspace_id); //close resources
+		H5Sclose(dataspace_id);
+	}
+
+	*charge_infromation_out=data_out;
+	return 0;
+}
+
+
 
 /*int h5md_get_dataset_information_from_all_groups(struct h5md_file *file, char* relative_dataset_name , void** data_out){*/
 

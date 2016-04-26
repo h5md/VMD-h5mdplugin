@@ -34,6 +34,12 @@ int h5md_get_box_information(struct h5md_file* file, float* out_box_information)
 //reads species information of all groups, allocates species_infromation_out
 int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infromation_out);
 
+//reads mass information of all groups, allocates mass_infromation_out
+int h5md_get_all_mass_infromation(struct h5md_file *file, float** mass_infromation_out);
+
+//reads charge information of all groups, allocates charge_infromation_out
+int h5md_get_all_charge_infromation(struct h5md_file *file, float** charge_infromation_out);
+
 // reads the next timestep of all groups and writes the data to coords iff natoms is the number of atoms in the timestep
 int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords);
 
