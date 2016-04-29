@@ -21,18 +21,13 @@ The end atom of bond number i is saved in the i-th row of /parameters/vmd_struct
 /parameters/vmd_structure/bond_from
 /parameters/vmd_structure/bond_to
 
-/* these fields absolutely must be set or initialized to empty */
+/* Parameters that can be read by this plugin. */
 	   char name[16]; -> per species	/parameters/vmd_structure/name
 	   char type[16]; -> per species	/parameters/vmd_structure/type     
 	   char resname[8]; -> per residue	/parameters/vmd_structure/resname
 	   int resid;	-> per atom		/parameters/vmd_structure/resid
 	   char segid[8]; -> per atom     	/parameters/vmd_structure/segid
 	   char chain[2]; -> per residue     	/parameters/vmd_structure/chain
-/* rest are optional; use optflags to specify what's present   */
-	   char altloc[2];			(not used)   
-	   char insertion[2];  			(not used)  
-	   float occupancy;    			(not used)  
-	   float bfactor;      			(not used)  
 	   float radius; -> per species		/parameters/vmd_structure/radius       
 	   int atomicnumber; (allowed in range 0 to 112) -> per species	/parameters/vmd_structure/atomicnumber
 
