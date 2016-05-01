@@ -13,15 +13,13 @@ Coloring is either default (red) or according to data_species[atomid]%112. That 
 ##################Bonds#################
 Bonds can be drawn in VMD by defining which two atoms share a bond. 
 For each bond the "start atom" and the "end atom" of the bond are defined.
-The start atom of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_from.
-The end atom of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_to.
+The start atom index of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_from.
+The end atom index of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_to.
 
 ###################Overview###################
-/parameters/vmd_structure/indexOfSpecies
-/parameters/vmd_structure/bond_from
-/parameters/vmd_structure/bond_to
+Additional parameters which are not specified in the H5MD specification but which can be read by this plugin.
 
-/* Parameters that can be read by this plugin. */
+	   bonds 				/parameters/vmd_structure/bond_from, /parameters/vmd_structure/bond_to
 	   char name[16]; -> per species	/parameters/vmd_structure/name
 	   char type[16]; -> per species	/parameters/vmd_structure/type     
 	   char resname[8]; -> per residue	/parameters/vmd_structure/resname
