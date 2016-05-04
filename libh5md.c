@@ -46,7 +46,6 @@ typedef struct h5md_group{
 	hid_t dataspace;
 	int rank_dataset;
 	int nspacedims;
-	h5md_box* boxes;
 } h5md_group;
 
 //file handling
@@ -67,7 +66,7 @@ int initialize_h5md_struct(struct h5md_file* file);
 int modify_information_about_file_content(struct h5md_file* file, char* group_name);
 int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id);
 herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t* info, void* _file);
-h5md_box* get_box_information(struct h5md_file* file, int group_number);
+h5md_box* get_box_information(struct h5md_file* file, int group_number, int time_i);
 int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vector_a, float* vector_b, float* vector_c);
 
 
@@ -166,12 +165,9 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 		file->natoms += dims_out[1];
 		groups[file->ngroups-1].nspacedims = dims_out[2];
 		groups[file->ngroups-1].natoms_group=dims_out[1];
-		groups[file->ngroups-1].group_path=group_name;
-
+		groups[file->ngroups-1].group_path=strdup(group_name);
 
 		file->groups=groups; // assign file->groups here since get_box_information() uses all group_path entries, get_box_information can then be called later
-		file->groups[file->ngroups-1].boxes=get_box_information(file, file->ngroups-1);
-		//file->groups=groups;
 
 		status=0;
 	}else{
@@ -633,8 +629,8 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 }
 
 // internally reads the box information of a given group into the memory
-h5md_box* get_box_information(struct h5md_file* file, int group_number){
-	h5md_box* boxes=malloc(sizeof(h5md_box)*file->ntime);
+h5md_box* get_box_information(struct h5md_file* file, int group_number, int time_i){
+	h5md_box* box=malloc(sizeof(h5md_box));
 
 	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
 	//try to open time-dependent box dataset, get box_dataset_timedependent_id
@@ -650,26 +646,21 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 	if(box_timedependent_dataset_id>0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
-		for(int time_i=0; time_i<file->ntime; time_i++){
-			h5md_box box;
-			float vector_a[3];
-			float vector_b[3];
-			float vector_c[3];
-			get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
-			//process to angles and lengths
-			box.A=calculate_length_of_vector(vector_a,3);
-			box.B=calculate_length_of_vector(vector_b,3);
-			box.C=calculate_length_of_vector(vector_c,3);
-			box.alpha= calculate_angle_between_vectors(vector_b,vector_c,3);
-			box.beta= calculate_angle_between_vectors(vector_a,vector_c,3);
-			box.gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
-			boxes[time_i]=box;
-		}
+		float vector_a[3];
+		float vector_b[3];
+		float vector_c[3];
+		get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
+		//process to angles and lengths
+		box->A=calculate_length_of_vector(vector_a,3);
+		box->B=calculate_length_of_vector(vector_b,3);
+		box->C=calculate_length_of_vector(vector_c,3);
+		box->alpha= calculate_angle_between_vectors(vector_b,vector_c,3);
+		box->beta= calculate_angle_between_vectors(vector_a,vector_c,3);
+		box->gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
 
 	}else{
 		if(box_timeindependent_dataset_id>0){
-			h5md_box box;
-			int time_i=FALSE;
+			time_i=FALSE;
 			//read timeindependent dataset
 			//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
 			float vector_a[3];
@@ -678,44 +669,34 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number){
 			get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
 			//according to VMD's molfile_timestep_t documentation
 			//process to angles and lengths
-			box.A=calculate_length_of_vector(vector_a,3);
-			box.B=calculate_length_of_vector(vector_b,3);
-			box.C=calculate_length_of_vector(vector_c,3);
-			box.alpha=calculate_angle_between_vectors(vector_b,vector_c,3);
-			box.beta=calculate_angle_between_vectors(vector_a,vector_c,3);
-			box.gamma=calculate_angle_between_vectors(vector_a,vector_b,3);
-			//copy timeindependent box ntimes
-			for(int time_i=0; time_i<file->ntime; time_i++){
-				boxes[time_i]=box;
-			}
+			box->A=calculate_length_of_vector(vector_a,3);
+			box->B=calculate_length_of_vector(vector_b,3);
+			box->C=calculate_length_of_vector(vector_c,3);
+			box->alpha=calculate_angle_between_vectors(vector_b,vector_c,3);
+			box->beta=calculate_angle_between_vectors(vector_a,vector_c,3);
+			box->gamma=calculate_angle_between_vectors(vector_a,vector_b,3);
 		}else{
 			printf("No box information found\n");
 		}
 	}
 
 
-	return boxes;
+	return box;
 
-}
-
-int free_box_information(struct h5md_file* file){
-	for(int i=0;i<file->ngroups;i++){
-		free(file->groups[i].boxes);
-	}
-	return 0;
 }
 
 
 int h5md_get_box_information(struct h5md_file* file, float* out_box_information){
 	//only use information of first group (file->groups[0]...) since VMD only supports one box
-	out_box_information[0]=file->groups[0].boxes[file->current_time].A;
-	out_box_information[1]=file->groups[0].boxes[file->current_time].B;
-	out_box_information[2]=file->groups[0].boxes[file->current_time].C;
-	out_box_information[3]=file->groups[0].boxes[file->current_time].alpha;
-	out_box_information[4]=file->groups[0].boxes[file->current_time].beta;
-	out_box_information[5]=file->groups[0].boxes[file->current_time].gamma;
-	if(file->current_time>=file->ntime) //free box information
-		free_box_information(file);
+	int group_number=0;
+	h5md_box* box=get_box_information(file, group_number, file->current_time);
+	out_box_information[0]=box->A;
+	out_box_information[1]=box->B;
+	out_box_information[2]=box->C;
+	out_box_information[3]=box->alpha;
+	out_box_information[4]=box->beta;
+	out_box_information[5]=box->gamma;
+	free(box);
 	return 0;
 }
 
