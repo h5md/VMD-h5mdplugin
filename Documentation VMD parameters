@@ -13,26 +13,19 @@ Coloring is either default (red) or according to data_species[atomid]%112. That 
 ##################Bonds#################
 Bonds can be drawn in VMD by defining which two atoms share a bond. 
 For each bond the "start atom" and the "end atom" of the bond are defined.
-The start atom of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_from.
-The end atom of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_to.
+The start atom index of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_from.
+The end atom index of bond number i is saved in the i-th row of /parameters/vmd_structure/bond_to.
 
 ###################Overview###################
-/parameters/vmd_structure/indexOfSpecies
-/parameters/vmd_structure/bond_from
-/parameters/vmd_structure/bond_to
+Additional parameters which are not specified in the H5MD specification but which can be read by this plugin.
 
-/* these fields absolutely must be set or initialized to empty */
+	   bonds 				/parameters/vmd_structure/bond_from, /parameters/vmd_structure/bond_to
 	   char name[16]; -> per species	/parameters/vmd_structure/name
 	   char type[16]; -> per species	/parameters/vmd_structure/type     
 	   char resname[8]; -> per residue	/parameters/vmd_structure/resname
 	   int resid;	-> per atom		/parameters/vmd_structure/resid
 	   char segid[8]; -> per atom     	/parameters/vmd_structure/segid
 	   char chain[2]; -> per residue     	/parameters/vmd_structure/chain
-/* rest are optional; use optflags to specify what's present   */
-	   char altloc[2];			(not used)   
-	   char insertion[2];  			(not used)  
-	   float occupancy;    			(not used)  
-	   float bfactor;      			(not used)  
 	   float radius; -> per species		/parameters/vmd_structure/radius       
 	   int atomicnumber; (allowed in range 0 to 112) -> per species	/parameters/vmd_structure/atomicnumber
 
