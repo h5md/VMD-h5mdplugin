@@ -332,6 +332,80 @@ void free_binary_tree_idmapper(idmapper_node* root){
 	}
 }
 
+int sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, float** to_be_sorted_data){
+		int i= group_number;
+		/////////////////
+		//read in id_data of group
+		if(file->groups[i].id_dataset_id>0){
+			int data_out_local_id[file->groups[i].natoms_group];
+			hid_t dataspace_id_id=H5Dget_space(file->groups[i].id_dataset_id); //Define dataset dataspace (for id_dataset) in file.
+
+			/* 
+			* Define hyperslab in the dataset. 
+			*/
+			hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+			dataset_slab_offset[2] = 0;
+			dataset_slab_offset[0] = file->current_time;
+			dataset_slab_offset[1] = 0;
+
+			hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+			dataset_slab_count[2] = 0;
+			dataset_slab_count[0] = 1;
+			dataset_slab_count[1] = file->groups[i].natoms_group;
+			H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+			/*
+			* Define memory dataspace.
+			*/
+			int rank=1; //linear data representation
+			hsize_t dimsm[rank];
+			dimsm[0]=file->natoms;
+
+			hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+
+			/* 
+			* Define memory hyperslab. 
+			*/
+			hsize_t offset_out[rank];
+			hsize_t count_out[rank];
+			offset_out[0]=0;
+			count_out[0]=file->groups[i].natoms_group;	
+			H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
+
+			/*
+			* Read data from hyperslab in the file into the hyperslab in memory
+			*/
+			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
+			H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
+			H5Sclose(memspace_id); //close resources
+			H5Sclose(dataspace_id_id);
+
+			//use id data to sort particle positions (use binary tree)
+			//create binary tree
+			idmapper_node* root=NULL;
+			for(int particle_i=0;particle_i<file->groups[i].natoms_group;particle_i++){
+				if(particle_i==0){
+					//save root of tree
+					root=insert_id(root,data_out_local_id[particle_i],particle_i);
+				}else{
+					insert_id(root,data_out_local_id[particle_i],particle_i);
+				}
+			}
+			//sort data_out_local_pos using the binary tree	
+			float _data_out_local_pos_sorted[3*file->groups[i].natoms_group];
+			for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
+				int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
+				//printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, data_out_local_pos[3*current_index_of_particle_id+0]);
+				_data_out_local_pos_sorted[3*particle_id+0]=(*to_be_sorted_data)[3*current_index_of_particle_id+0];
+				_data_out_local_pos_sorted[3*particle_id+1]=(*to_be_sorted_data)[3*current_index_of_particle_id+1];
+				_data_out_local_pos_sorted[3*particle_id+2]=(*to_be_sorted_data)[3*current_index_of_particle_id+2];
+			}
+			//write sorted data back to to_be_sorted_data
+			memcpy(*to_be_sorted_data,_data_out_local_pos_sorted,sizeof(float)*3*file->groups[i].natoms_group);
+			free_binary_tree_idmapper(root);
+		}
+}
+
+
 // reads the next timestep, allocates coords and sets natoms to the number of atoms
 int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 
@@ -341,7 +415,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 	for(int i=0; i<file->ngroups; i++){//go through all groups
 		/////////////////
 		//read in positions of group
-		float data_out_local_pos[3*file->groups[i].natoms_group];
+		float* data_out_local_pos= malloc(sizeof(float) *3*file->groups[i].natoms_group );
 		hid_t dataspace_pos_id=H5Dget_space(file->groups[i].pos_dataset_id); //Define dataset dataspace (for pos_dataset) in file.
 
 		/* 
@@ -450,79 +524,12 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 
 
 
-		/////////////////
-		//read in id_data of group
-		if(file->groups[i].id_dataset_id>0){
-			int data_out_local_id[file->groups[i].natoms_group];
-			hid_t dataspace_id_id=H5Dget_space(file->groups[i].id_dataset_id); //Define dataset dataspace (for id_dataset) in file.
-
-			/* 
-			* Define hyperslab in the dataset. 
-			*/
-			dataset_slab_offset[2] = 0;
-			dataset_slab_offset[0] = file->current_time;
-			dataset_slab_offset[1] = 0;
-
-			dataset_slab_count[2] = 0;
-			dataset_slab_count[0] = 1;
-			dataset_slab_count[1] = file->groups[i].natoms_group;
-			H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
-			/*
-			* Define memory dataspace.
-			*/
-			int rank=1; //linear data representation
-			hsize_t dimsm[rank];
-			dimsm[0]=file->natoms;
-
-			hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
-
-			/* 
-			* Define memory hyperslab. 
-			*/
-			hsize_t offset_out[rank];
-			hsize_t count_out[rank];
-			offset_out[0]=0;
-			count_out[0]=file->groups[i].natoms_group;	
-			H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
-
-			/*
-			* Read data from hyperslab in the file into the hyperslab in memory
-			*/
-			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-			H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
-			H5Sclose(memspace_id); //close resources
-			H5Sclose(dataspace_id_id);
-
-			//use id data to sort particle positions (use binary tree)
-			//create binary tree
-			idmapper_node* root=NULL;
-			for(int particle_i=0;particle_i<file->groups[i].natoms_group;particle_i++){
-				if(particle_i==0){
-					//save root of tree
-					root=insert_id(root,data_out_local_id[particle_i],particle_i);
-				}else{
-					insert_id(root,data_out_local_id[particle_i],particle_i);
-				}
-			}
-			//sort data_out_local_pos using the binary tree	
-			float _data_out_local_pos_sorted[3*file->groups[i].natoms_group];
-			for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
-				int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
-				//printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, data_out_local_pos[3*current_index_of_particle_id+0]);
-				_data_out_local_pos_sorted[3*particle_id+0]=data_out_local_pos[3*current_index_of_particle_id+0];
-				_data_out_local_pos_sorted[3*particle_id+1]=data_out_local_pos[3*current_index_of_particle_id+1];
-				_data_out_local_pos_sorted[3*particle_id+2]=data_out_local_pos[3*current_index_of_particle_id+2];
-			}
-			//write sorted data back to data_out_local_pos
-			memcpy(data_out_local_pos,_data_out_local_pos_sorted,sizeof(float)*3*file->groups[i].natoms_group);
-			free_binary_tree_idmapper(root);
-
-
-		}
-
+		sort_data_according_to_id_dataset(file, i, &(data_out_local_pos));
+		
 		//memcpy to data_out
 		memcpy(&data_out[3*previous_atoms], data_out_local_pos,sizeof(float)*3*file->groups[i].natoms_group);
-		previous_atoms+=file->groups[i].natoms_group; 
+		previous_atoms+=file->groups[i].natoms_group;
+		free(data_out_local_pos);
 
 	}
 

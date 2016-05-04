@@ -9,7 +9,7 @@ CXXFLAGS=-Wall -O0 -fPIC -g
 
 # Points to the root of fused googletest, relative to where this file is. make sure to adjust the 3 needed files (which are the only needed files) in this directory (correct #include "/gtest/gtest.h" to #include "gtest.h" since the header file is found in the same directory)
 #change this directory
-FUSED_GTEST_DIR = $(HOME)/bin/gtest-1.7.0/fused-src/gtest
+FUSED_GTEST_DIR = $(HOME)/src/gtest-1.7.0/fused-src/gtest
 
 # Paths to the fused gtest files.
 FUSED_GTEST_H = $(FUSED_GTEST_DIR)/gtest.h

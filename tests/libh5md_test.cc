@@ -110,7 +110,7 @@ int read_real_dataset_float(){
  	h5md_open(&file_real, "../samples/full_vmd_structure.h5", -1);
 	H5T_class_t type_class_out;
 	void* data_out;
-	char* dataset_name= "/parameters/vmd_structure/mass";
+	char* dataset_name= "particles/atoms/mass";
 	int status_read=h5md_read_timeindependent_dataset_automatically(file_real, dataset_name, &data_out, &type_class_out);
 	//display read_data, decide about type at runtime
 	if(status_read==0){
