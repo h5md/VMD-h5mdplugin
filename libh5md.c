@@ -33,19 +33,13 @@ typedef struct h5md_box{
 typedef struct h5md_group{
 	char* group_path;
 	int natoms_group;
+	int nspacedims;
 	hid_t pos_dataset_id;
 	hid_t species_dataset_id;
 	hid_t mass_dataset_id;
 	hid_t charge_dataset_id;
 	hid_t image_dataset_id;
 	hid_t id_dataset_id;
-	hid_t datatype;
-	H5T_class_t t_class;
-	H5T_order_t order;
-	size_t size_datatype;
-	hid_t dataspace;
-	int rank_dataset;
-	int nspacedims;
 } h5md_group;
 
 //file handling
@@ -59,6 +53,7 @@ struct h5md_file{
 	int current_time;	//for h5md_seek_timestep()
 	int correction_timestep_VMD_counting;
 };
+
 
 //declaration of "private" functions, cannot be accessed from outside the library
 //declaration here in order to be able to sort the content of the file according to it's "importance"
@@ -101,6 +96,8 @@ herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t
 	}
 	return status;	//if status is 0 search for other position datasets continues. If status is negative, search is aborted.
 }
+
+
 
 int modify_information_about_file_content(struct h5md_file* file, char* group_name){
 	int status=-1;
@@ -151,24 +148,24 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 		* Get datatype and dataspace handles and then query
 		* dataset class, order, size, rank and dimensions. Since all datasets are checked to be compatible do this only for the first dataset
 		*/
+		hid_t datatype  = H5Dget_type(pos_dataset_id);     // datatype handle
+		H5T_class_t t_class     = H5Tget_class(datatype);
+		H5T_order_t order     = H5Tget_order(datatype);
 
-		groups[file->ngroups-1].datatype  = H5Dget_type(pos_dataset_id);     // datatype handle
-		groups[file->ngroups-1].t_class     = H5Tget_class(groups[file->ngroups-1].datatype);
-		groups[file->ngroups-1].order     = H5Tget_order(groups[file->ngroups-1].datatype);
+		size_t size_datatype  = H5Tget_size(datatype);
+		hid_t dataspace_id = H5Dget_space(pos_dataset_id);	//dataspace handle
+		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
+		hsize_t dims_out[rank_dataset];
 
-		groups[file->ngroups-1].size_datatype  = H5Tget_size(groups[file->ngroups-1].datatype);
-		groups[file->ngroups-1].dataspace = H5Dget_space(pos_dataset_id);	//dataspace handle
-		groups[file->ngroups-1].rank_dataset      = H5Sget_simple_extent_ndims(groups[file->ngroups-1].dataspace);
-		hsize_t dims_out[groups[file->ngroups-1].rank_dataset];
-		H5Sget_simple_extent_dims(groups[file->ngroups-1].dataspace, dims_out, NULL);
+		H5Sget_simple_extent_dims(dataspace_id, dims_out, NULL);
 		file->ntime = dims_out[0];
 		file->natoms += dims_out[1];
 		groups[file->ngroups-1].nspacedims = dims_out[2];
 		groups[file->ngroups-1].natoms_group=dims_out[1];
 		groups[file->ngroups-1].group_path=strdup(group_name);
+		H5Sclose(dataspace_id);
 
-		file->groups=groups; // assign file->groups here since get_box_information() uses all group_path entries, get_box_information can then be called later
-
+		file->groups=groups;
 		status=0;
 	}else{
 		printf("position datasets are not compatible\n");
@@ -343,12 +340,13 @@ int sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, 
 			/* 
 			* Define hyperslab in the dataset. 
 			*/
-			hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+			int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id_id);
+			hsize_t dataset_slab_offset[rank_dataset];
 			dataset_slab_offset[2] = 0;
 			dataset_slab_offset[0] = file->current_time;
 			dataset_slab_offset[1] = 0;
 
-			hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+			hsize_t dataset_slab_count[rank_dataset];
 			dataset_slab_count[2] = 0;
 			dataset_slab_count[0] = 1;
 			dataset_slab_count[1] = file->groups[i].natoms_group;
@@ -421,12 +419,14 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
-		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+
+		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_pos_id);
+		hsize_t dataset_slab_offset[rank_dataset];
 		dataset_slab_offset[0] = file->current_time;
 		dataset_slab_offset[1] = 0;
 		dataset_slab_offset[2] = 0;
 
-		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		hsize_t dataset_slab_count[rank_dataset];
 		dataset_slab_count[0] = 1;
 		dataset_slab_count[1] = file->groups[i].natoms_group;
 		dataset_slab_count[2] = file->groups[i].nspacedims;
@@ -895,9 +895,10 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
-		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
+		hsize_t dataset_slab_offset[rank_dataset];
 		dataset_slab_offset[0] = 0;
-		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		hsize_t dataset_slab_count[rank_dataset];
 		dataset_slab_count[0] = file->groups[i].natoms_group;
 		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
 
@@ -948,9 +949,10 @@ int h5md_get_all_mass_infromation(struct h5md_file *file, float** mass_infromati
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
-		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
+		hsize_t dataset_slab_offset[rank_dataset];
 		dataset_slab_offset[0] = 0;
-		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		hsize_t dataset_slab_count[rank_dataset];
 		dataset_slab_count[0] = file->groups[i].natoms_group;
 		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
 
@@ -1000,9 +1002,10 @@ int h5md_get_all_charge_infromation(struct h5md_file *file, float** charge_infro
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
-		hsize_t dataset_slab_offset[file->groups[i].rank_dataset];
+		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
+		hsize_t dataset_slab_offset[rank_dataset];
 		dataset_slab_offset[0] = 0;
-		hsize_t dataset_slab_count[file->groups[i].rank_dataset];
+		hsize_t dataset_slab_count[rank_dataset];
 		dataset_slab_count[0] = file->groups[i].natoms_group;
 		H5Sselect_hyperslab(dataspace_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
 
