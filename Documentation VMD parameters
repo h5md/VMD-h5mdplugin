@@ -6,7 +6,7 @@ The dataset indexOfSpecies must contain as much rows as there are different spec
 *If a parameter is stored per residue, then there has to be a dataset /parameters/vmd_structure/resid. The dataset resid must contain as much rows as there are atoms. For each atom the membership to a residue is then stored there by assigning a resid. resid is equivalent to the row in which the data stands.
 In VMD each atom is explicitly assigned to its properties. This is done by reading out the corresponding properties (through tracing the atomid, indexOfSpecies, resid).
 
-Which properties can be read out by the VMD-H5MD plugin and how they need to be stored can be seen in the section overview. If present these parameters are used for coloring,... if not present, the plugin sets default values.
+Which properties can be read out by the VMD-H5MD plugin (additional to the ones from the h5md specification) and how they need to be stored can be seen in the section overview. If present these parameters are used for coloring,... if not present, the plugin sets default values.
 Coloring is either default (red) or according to data_species[atomid]%112. That means each species gets its own color (modulo 112)
 
 
