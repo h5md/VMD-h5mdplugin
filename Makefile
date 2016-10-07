@@ -2,7 +2,7 @@
 VMDDIR=/usr/local/lib/vmd
 
 # Where the HDF5 library is installed
-HDF5LDFLAGS=-L/usr/lib64
+HDF5LDFLAGS=-L/usr/lib64/mpi/gcc/openmpi/lib64
 HDF5CPPFLAGS=-I/usr/include
 
 # Which libraries to use

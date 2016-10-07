@@ -299,9 +299,11 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 		root->left=insert_id(root->left,id,current_index_in_dataset);
 	}else if(id>root->id){
 		root->right=insert_id(root->right,id,current_index_in_dataset);
-	}else if(id==root->id){
+	}else if(id==root->id && id>=0){
 		printf("ERROR: id dataset is not unique\n");
 		return NULL;
+	}else if(id<0){
+		//ignore negative ids, this is typically a hint for a file which contains a variable number of particles from a grand canonical simulation.
 	}
 	return root;
 }
@@ -342,14 +344,14 @@ int sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, 
 			*/
 			int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id_id);
 			hsize_t dataset_slab_offset[rank_dataset];
-			dataset_slab_offset[2] = 0;
 			dataset_slab_offset[0] = file->current_time;
 			dataset_slab_offset[1] = 0;
+			dataset_slab_offset[2] = 0;
 
 			hsize_t dataset_slab_count[rank_dataset];
-			dataset_slab_count[2] = 0;
 			dataset_slab_count[0] = 1;
 			dataset_slab_count[1] = file->groups[i].natoms_group;
+			dataset_slab_count[2] = 1;
 			H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
 			/*
 			* Define memory dataspace.
@@ -376,6 +378,7 @@ int sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, 
 			H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
 			H5Sclose(memspace_id); //close resources
 			H5Sclose(dataspace_id_id);
+			
 
 			//use id data to sort particle positions (use binary tree)
 			//create binary tree
