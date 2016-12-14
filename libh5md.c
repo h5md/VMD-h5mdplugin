@@ -573,6 +573,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 	char* full_path_box_dataset_timeindependent=concatenate_strings((const char*) file->groups[group_i].group_path,(const char*) "/box/edges");
 	hid_t box_timeindependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timeindependent ,H5P_DEFAULT);
 
+
 	if(box_timedependent_dataset_id>0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
@@ -592,7 +593,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 		//read timeindependent dataset
 		//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
 		int dims_box;
-		int is_cubic=h5md_get_length_of_one_dimensional_dataset(file, full_path_box_dataset_timedependent, &dims_box);
+		int is_cubic=h5md_get_length_of_one_dimensional_dataset(file, full_path_box_dataset_timeindependent, &dims_box);
 		float* data_box;
 		H5T_class_t box_class_out;
 		h5md_read_timeindependent_dataset_automatically(file, full_path_box_dataset_timeindependent,(void**) &data_box, &box_class_out);
@@ -863,7 +864,7 @@ int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *data
 		*length_of_dataset=dims_dataset[0];
 		return 0;
 	}else{
-		//printf("Dataset %s is not one dimensional.\n", dataset_name);	
+/*		printf("Dataset %s is not one dimensional.\n", dataset_name);	*/
 		return -1;
 	}
 }
