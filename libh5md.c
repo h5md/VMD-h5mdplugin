@@ -331,7 +331,7 @@ void free_binary_tree_idmapper(idmapper_node* root){
 	}
 }
 
-int sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, float** to_be_sorted_data){
+void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, float** to_be_sorted_data){
 		int i= group_number;
 		/////////////////
 		//read in id_data of group
@@ -1337,7 +1337,7 @@ int initialize_h5md_struct(struct h5md_file* file){
 	return 0;
 }
 
-int h5md_set_correction_for_VMD_counting_timesteps(struct h5md_file* file){
+void h5md_set_correction_for_VMD_counting_timesteps(struct h5md_file* file){
 	file->correction_timestep_VMD_counting=1;
 }
 
