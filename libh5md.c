@@ -513,7 +513,6 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 			int status_box_vectors=get_box_vectors(file, i, file->current_time, vector_a,vector_b,vector_c);
 			//use image_data to calculate absolute positions
 			if(status_box_vectors==0) {
-				//XXX this is not correctly working! check again
 				for(int j=0; j< file->groups[i].nspacedims*file->groups[i].natoms_group;j=j+3){
 					data_out_local_pos[j]=data_out_local_pos[j]+vector_a[0]*data_out_local_image[j]+vector_b[0]*data_out_local_image[j+1]+vector_c[0]*data_out_local_image[j+2];
 					data_out_local_pos[j+1]=data_out_local_pos[j+1]+vector_a[1]*data_out_local_image[j]+vector_b[1]*data_out_local_image[j+1]+vector_c[1]*data_out_local_image[j+2];
