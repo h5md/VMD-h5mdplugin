@@ -64,16 +64,19 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 /* read the coordinates */
 static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	struct h5md_file* file=_file;
+	int status;
 	if (ts != NULL ) { //skip reading if ts is NULL pointer (needs modification of the timestep below)
 		//read boxinformation
 		float box_information[6];
-		h5md_get_box_information(file, box_information);
-		ts->A=box_information[0];
-		ts->B=box_information[1];
-		ts->C=box_information[2];
-		ts->alpha=box_information[3];
-		ts->beta=box_information[4];
-		ts->gamma=box_information[5];
+		int status_box=h5md_get_box_information(file, box_information);
+		if(status_box==0){
+			ts->A=box_information[0];
+			ts->B=box_information[1];
+			ts->C=box_information[2];
+			ts->alpha=box_information[3];
+			ts->beta=box_information[4];
+			ts->gamma=box_information[5];
+		}
 		ts->velocities = NULL;
 		ts->physical_time = 0.0;
 		//read coords
@@ -81,9 +84,9 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 		int correction_timestep=h5md_get_correction_for_VMD_counting_timesteps(file); // correct for VMD starting to count timesteps from 1 onwards, while h5mdplugin counts timesteps from 0 onwards
 		if(status_read_timestep!=0 && correction_timestep == 0){
 			h5md_set_correction_for_VMD_counting_timesteps(file);
-        		return MOLFILE_SUCCESS;
+        		status= MOLFILE_SUCCESS;
         	}else if(status_read_timestep!=0){
-        		return MOLFILE_ERROR;
+        		status= MOLFILE_ERROR;
         	}
 	} else {
 		int current_time;
@@ -91,7 +94,7 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 		h5md_seek_timestep(file, current_time+1); //modify timestep in the internal state of the plugin for this file	
 	}
 
-	return MOLFILE_SUCCESS;
+	return status;
 }
 
 //find index of species "int species" in data_index_species which has length len_index
@@ -206,7 +209,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	
 	int species_check = check_consistency_species_index_of_species(file, len_data_index_species, data_species);
 	if(species_check!=0){
-		printf("ERROR: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as there are species present in the different groups /particles/*/species !\n");
+		printf("NOTE: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as there are species present in the different groups /particles/*/species !\n");
 		printf("Skipping species related data.\n");
 	}else{
 		status_read_name=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/name",(void**) &data_name, &type_class_name);

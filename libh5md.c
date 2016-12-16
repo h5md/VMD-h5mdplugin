@@ -61,7 +61,7 @@ int initialize_h5md_struct(struct h5md_file* file);
 int modify_information_about_file_content(struct h5md_file* file, char* group_name);
 int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id);
 herr_t check_for_pos_dataset( hid_t g_id, const char* obj_name, const H5L_info_t* info, void* _file);
-h5md_box* get_box_information(struct h5md_file* file, int group_number, int time_i);
+int get_box_information(struct h5md_file* file, int group_number, int time_i, h5md_box* out_box);
 int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vector_a, float* vector_b, float* vector_c);
 
 
@@ -331,7 +331,7 @@ void free_binary_tree_idmapper(idmapper_node* root){
 	}
 }
 
-void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, float** to_be_sorted_data){
+void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, float* to_be_sorted_data){
 		int i= group_number;
 		/////////////////
 		//read in id_data of group
@@ -375,11 +375,9 @@ void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number,
 			* Read data from hyperslab in the file into the hyperslab in memory
 			*/
 			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-			H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
+			int status=H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
 			H5Sclose(memspace_id); //close resources
 			H5Sclose(dataspace_id_id);
-			
-
 			//use id data to sort particle positions (use binary tree)
 			//create binary tree
 			idmapper_node* root=NULL;
@@ -395,13 +393,13 @@ void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number,
 			float _data_out_local_pos_sorted[3*file->groups[i].natoms_group];
 			for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
 				int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
-				//printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, data_out_local_pos[3*current_index_of_particle_id+0]);
-				_data_out_local_pos_sorted[3*particle_id+0]=(*to_be_sorted_data)[3*current_index_of_particle_id+0];
-				_data_out_local_pos_sorted[3*particle_id+1]=(*to_be_sorted_data)[3*current_index_of_particle_id+1];
-				_data_out_local_pos_sorted[3*particle_id+2]=(*to_be_sorted_data)[3*current_index_of_particle_id+2];
+/*				printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, to_be_sorted_data[3*current_index_of_particle_id+0]);*/
+				_data_out_local_pos_sorted[3*particle_id+0]=to_be_sorted_data[3*current_index_of_particle_id+0];
+				_data_out_local_pos_sorted[3*particle_id+1]=to_be_sorted_data[3*current_index_of_particle_id+1];
+				_data_out_local_pos_sorted[3*particle_id+2]=to_be_sorted_data[3*current_index_of_particle_id+2];
 			}
 			//write sorted data back to to_be_sorted_data
-			memcpy(*to_be_sorted_data,_data_out_local_pos_sorted,sizeof(float)*3*file->groups[i].natoms_group);
+			memcpy(to_be_sorted_data,_data_out_local_pos_sorted,sizeof(float)*3*file->groups[i].natoms_group);
 			free_binary_tree_idmapper(root);
 		}
 }
@@ -416,14 +414,14 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 	for(int i=0; i<file->ngroups; i++){//go through all groups
 		/////////////////
 		//read in positions of group
-		float* data_out_local_pos= malloc(sizeof(float) *3*file->groups[i].natoms_group );
+		float data_out_local_pos[file->groups[i].natoms_group*file->groups[i].nspacedims];
 		hid_t dataspace_pos_id=H5Dget_space(file->groups[i].pos_dataset_id); //Define dataset dataspace (for pos_dataset) in file.
 
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
 
-		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_pos_id);
+		int rank_dataset      = file->groups[i].nspacedims;
 		hsize_t dataset_slab_offset[rank_dataset];
 		dataset_slab_offset[0] = file->current_time;
 		dataset_slab_offset[1] = 0;
@@ -464,75 +462,74 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 
 		/////////////////
 		//read in image_data of group
-		int data_out_local_image[file->groups[i].natoms_group];
+		int data_out_local_image[file->groups[i].natoms_group*file->groups[i].nspacedims];
 		if(file->groups[i].image_dataset_id>0){
 			hid_t dataspace_image_id=H5Dget_space(file->groups[i].image_dataset_id); //Define dataset dataspace (for image_dataset) in file.
-
 			/* 
 			* Define hyperslab in the dataset. 
-			*/
-			dataset_slab_offset[2] = 0;
-			dataset_slab_offset[0] = file->current_time;
-			dataset_slab_offset[1] = 0;
+			*/	
+			int rank_dataset_images      = file->groups[i].nspacedims;
+			hsize_t dataset_slab_offset_images[rank_dataset_images];
+			dataset_slab_offset_images[0] = file->current_time;
+			dataset_slab_offset_images[1] = 0;
+			dataset_slab_offset_images[2] = 0;
 
-			dataset_slab_count[2] =0 ;
-			dataset_slab_count[0] = 1;
-			dataset_slab_count[1] = file->groups[i].natoms_group;
-			H5Sselect_hyperslab(dataspace_image_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+			hsize_t dataset_slab_count_images[rank_dataset_images];
+			dataset_slab_count_images[0] = 1;
+			dataset_slab_count_images[1] = file->groups[i].natoms_group;
+			dataset_slab_count_images[2] = file->groups[i].nspacedims;
+			H5Sselect_hyperslab(file->groups[i].image_dataset_id, H5S_SELECT_SET, dataset_slab_offset_images, NULL, dataset_slab_count_images, NULL);
 
 			/*
 			* Define memory dataspace.
 			*/
-			int rank=1; //linear data representation
-			hsize_t dimsm[rank];
-			dimsm[0]=file->natoms;
+			int rank_images=1; //linear data representation
+			hsize_t dims_images[rank_images];
+			dims_images[0]=file->natoms* file->groups[i].nspacedims;
 
-			hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+			hid_t memspace_id_images = H5Screate_simple(rank_images,dims_images,NULL);
 
 			/* 
 			* Define memory hyperslab. 
 			*/
-			hsize_t offset_out[rank];
-			hsize_t count_out[rank];
-			offset_out[0]=0;
-			count_out[0]=file->groups[i].natoms_group;	
-			H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
-
+			hsize_t offset_out_images[rank_images];
+			hsize_t count_out_images[rank_images];
+			offset_out_images[0]=0;
+			count_out_images[0]=file->groups[i].natoms_group*file->groups[i].nspacedims;	
+			H5Sselect_hyperslab(memspace_id_images, H5S_SELECT_SET, offset_out_images, NULL, count_out_images, NULL);
 
 			/*
 			* Read data from hyperslab in the file into the hyperslab in memory
 			*/
-			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-			H5Dread (file->groups[i].image_dataset_id, wanted_memory_datatype, memspace_id, dataspace_image_id, H5P_DEFAULT, data_out_local_image); 
+			hid_t wanted_memory_datatype_images = H5T_NATIVE_INT;
+			int status=H5Dread(file->groups[i].image_dataset_id, wanted_memory_datatype_images, memspace_id_images, dataspace_image_id, H5P_DEFAULT, data_out_local_image); 
 			H5Sclose(memspace_id); //close resources
 			H5Sclose(dataspace_image_id);
-
 			//////////////
 			//get box_vectors, not using box_information form get_box, since projection of 3 box vectors (9 variables) to only 3 angles and 3 length has inheritent loss of information (only 6 variables)
 			float vector_a[3];
 			float vector_b[3];
 			float vector_c[3];
-			get_box_vectors(file, i, file->current_time, vector_a,vector_b,vector_c);
-
+			int status_box_vectors=get_box_vectors(file, i, file->current_time, vector_a,vector_b,vector_c);
 			//use image_data to calculate absolute positions
-			for(int i=0; i< file->groups[i].natoms_group;i=i+3){
-				data_out_local_pos[i]=data_out_local_pos[i]+vector_a[0]*data_out_local_image[i]+vector_b[0]*data_out_local_image[i+1]+vector_c[0]*data_out_local_image[i+2];
-				data_out_local_pos[i+1]=data_out_local_pos[i+1]+vector_a[1]*data_out_local_image[i]+vector_b[1]*data_out_local_image[i+1]+vector_c[1]*data_out_local_image[i+2];
-				data_out_local_pos[i+2]=data_out_local_pos[i+2]+vector_a[2]*data_out_local_image[i]+vector_b[2]*data_out_local_image[i+1]+vector_c[2]*data_out_local_image[i+2];
+			if(status_box_vectors==0) {
+				//XXX this is not correctly working! check again
+				for(int j=0; j< file->groups[i].nspacedims*file->groups[i].natoms_group;j=j+3){
+					data_out_local_pos[j]=data_out_local_pos[j]+vector_a[0]*data_out_local_image[j]+vector_b[0]*data_out_local_image[j+1]+vector_c[0]*data_out_local_image[j+2];
+					data_out_local_pos[j+1]=data_out_local_pos[j+1]+vector_a[1]*data_out_local_image[j]+vector_b[1]*data_out_local_image[j+1]+vector_c[1]*data_out_local_image[j+2];
+					data_out_local_pos[j+2]=data_out_local_pos[j+2]+vector_a[2]*data_out_local_image[j]+vector_b[2]*data_out_local_image[j+1]+vector_c[2]*data_out_local_image[j+2];
+				}
 			}
 
 		}else{
 			//nothing to do with data_out if no box information is present
 		}
 
-
-
-		sort_data_according_to_id_dataset(file, i, &(data_out_local_pos));
-		
+		sort_data_according_to_id_dataset(file, i, data_out_local_pos);
 		//memcpy to data_out
 		memcpy(&data_out[3*previous_atoms], data_out_local_pos,sizeof(float)*3*file->groups[i].natoms_group);
+		
 		previous_atoms+=file->groups[i].natoms_group;
-		free(data_out_local_pos);
 
 	}
 
@@ -542,7 +539,6 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 	int current_time;
 	h5md_get_current_time(file,&current_time);
 	int status_seek= h5md_seek_timestep(file, current_time+1); //modify timestep
-
 
 	if(status_seek==0){
 		return 0;
@@ -564,6 +560,7 @@ int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords){
 //internally reads box_vectors of group_i at time_i into memory. If the dataset is not timedependent, then time_i is ignored.
 //memory for the box vectors has to be allocated in advance, it is implicitly assumed that the box is three dimensional.
 int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vector_a, float* vector_b, float* vector_c){
+	int status;
 	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
 	//try to open time-dependent box dataset, get box_dataset_timedependent_id
 	char* full_path_box_dataset_timedependent=concatenate_strings((const char*) file->groups[group_i].group_path,(const char*) "/box/edges/value");	
@@ -589,6 +586,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 		vector_c[1]=data_box[time_i*9+7];
 		vector_c[2]=data_box[time_i*9+8];
 		free (data_box);
+		status=0;
 	}else if(box_timeindependent_dataset_id>0){
 		//read timeindependent dataset
 		//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
@@ -608,6 +606,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 			vector_c[0]=0;
 			vector_c[1]=0;
 			vector_c[2]=data_box[2];
+			status=0;
 		}else{
 			//box is triclinic implies matrix
 			//VMD expects system to be 3dimensional -> assume 3x3 matrix
@@ -620,6 +619,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 			vector_c[0]=data_box[6];
 			vector_c[1]=data_box[7];
 			vector_c[2]=data_box[8];
+			status=0;
 		}
 	}else{
 		//printf("No box information found\n");
@@ -632,16 +632,18 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 		vector_c[0]=0;
 		vector_c[1]=0;
 		vector_c[2]=0;
+		status=-1;
 	}
 	free(full_path_box_dataset_timeindependent);
 	free(full_path_box_dataset_timedependent);
-	return 0;
+	return status;
 
 }
 
 // internally reads the box information of a given group into the memory
-h5md_box* get_box_information(struct h5md_file* file, int group_number, int time_i){
-	h5md_box* box=malloc(sizeof(h5md_box));
+int get_box_information(struct h5md_file* file, int group_number, int time_i, h5md_box* out_box){
+	int status;
+	h5md_box* box=out_box;
 
 	//check whether box_dataset is timedependent, if it is timedependent use it, otherwise copy the box information ntime times
 	//try to open time-dependent box dataset, get box_dataset_timedependent_id
@@ -654,13 +656,14 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number, int time
 	hid_t box_timeindependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timeindependent ,H5P_DEFAULT);
 	free(full_path_box_dataset_timeindependent);
 
+	float vector_a[3];
+	float vector_b[3];
+	float vector_c[3];
 	if(box_timedependent_dataset_id>0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
-		float vector_a[3];
-		float vector_b[3];
-		float vector_c[3];
-		get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
+		status=get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
+		//according to VMD's molfile_timestep_t documentation
 		//process to angles and lengths
 		box->A=calculate_length_of_vector(vector_a,3);
 		box->B=calculate_length_of_vector(vector_b,3);
@@ -668,16 +671,12 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number, int time
 		box->alpha= calculate_angle_between_vectors(vector_b,vector_c,3);
 		box->beta= calculate_angle_between_vectors(vector_a,vector_c,3);
 		box->gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
-
 	}else{
 		if(box_timeindependent_dataset_id>0){
 			time_i=FALSE;
 			//read timeindependent dataset
 			//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
-			float vector_a[3];
-			float vector_b[3];
-			float vector_c[3];
-			get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
+			status=get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
 			//according to VMD's molfile_timestep_t documentation
 			//process to angles and lengths
 			box->A=calculate_length_of_vector(vector_a,3);
@@ -687,12 +686,13 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number, int time
 			box->beta=calculate_angle_between_vectors(vector_a,vector_c,3);
 			box->gamma=calculate_angle_between_vectors(vector_a,vector_b,3);
 		}else{
+			status=-1;
 			printf("No box information found\n");
 		}
 	}
 
 
-	return box;
+	return status;
 
 }
 
@@ -700,15 +700,15 @@ h5md_box* get_box_information(struct h5md_file* file, int group_number, int time
 int h5md_get_box_information(struct h5md_file* file, float* out_box_information){
 	//only use information of first group (file->groups[0]...) since VMD only supports one box
 	int group_number=0;
-	h5md_box* box=get_box_information(file, group_number, file->current_time);
-	out_box_information[0]=box->A;
-	out_box_information[1]=box->B;
-	out_box_information[2]=box->C;
-	out_box_information[3]=box->alpha;
-	out_box_information[4]=box->beta;
-	out_box_information[5]=box->gamma;
-	free(box);
-	return 0;
+	h5md_box box;
+	int status=get_box_information(file, group_number, file->current_time, &box);
+	out_box_information[0]=box.A;
+	out_box_information[1]=box.B;
+	out_box_information[2]=box.C;
+	out_box_information[3]=box.alpha;
+	out_box_information[4]=box.beta;
+	out_box_information[5]=box.gamma;
+	return status;
 }
 
 
@@ -1376,7 +1376,7 @@ int is_zero_vector(float* vector, int dimensions){
 
 float calculate_angle_between_vectors(float* vector1, float* vector2, int dimensions){
 	if(is_zero_vector(vector1, dimensions)==0 || is_zero_vector(vector2, dimensions)==0){
-		printf("Error: Cannot calculate angle to the zero vector which has length 0\n");
+		printf("ERROR: Cannot calculate angle to the zero vector which has length 0\n");
 		return -1.0;
 	}
 	float angle=0.0;
