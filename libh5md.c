@@ -889,7 +889,7 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 	//derived from h5md_get_timestep() above
 	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
-	int* data_out= malloc(sizeof(int)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
+	int* data_out= malloc(sizeof(int)*file->natoms); //allocate space for data in memory, which have the order data_out[atom_nr]
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
@@ -933,6 +933,7 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 		H5Sclose(memspace_id); //close resources
 		H5Sclose(dataspace_id);
 	}
+	
 
 	*species_infromation_out=data_out;
 	return 0;
@@ -943,7 +944,7 @@ int h5md_get_all_mass_infromation(struct h5md_file *file, float** mass_infromati
 	//derived from h5md_get_timestep() above
 	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
-	float* data_out= malloc(sizeof(float)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
+	float* data_out= malloc(sizeof(float)*file->natoms); //allocate space for data in memory, which have the order data_out[atom_nr]
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
@@ -996,7 +997,7 @@ int h5md_get_all_charge_infromation(struct h5md_file *file, float** charge_infro
 	//derived from h5md_get_timestep() above
 	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
-	float* data_out= malloc(sizeof(float)*file->natoms * file->ngroups); //allocate space for data in memory, which have the order data_out[atom_nr]
+	float* data_out= malloc(sizeof(float)*file->natoms); //allocate space for data in memory, which have the order data_out[atom_nr]
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
