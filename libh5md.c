@@ -70,6 +70,7 @@ char* concatenate_strings(const char* string1,const char* string2);
 int max(int a, int b);
 float calculate_length_of_vector(float* vector, int dimensions);
 float calculate_angle_between_vectors(float* vector1, float* vector2, int dimensions);
+char* mystrdup(char* str);
 
 int discover_all_groups(struct h5md_file* file){
 	H5Lvisit(file->file_id, H5_INDEX_NAME, H5_ITER_NATIVE, check_for_pos_dataset, (void*) file);	//discover all groups with position datasets
@@ -145,14 +146,10 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 		groups[file->ngroups-1].id_dataset_id=id_dataset_id;
 
 		/*
-		* Get datatype and dataspace handles and then query
-		* dataset class, order, size, rank and dimensions. Since all datasets are checked to be compatible do this only for the first dataset
+		* Get dataspace handles and then query
+		* dataset rank and dimensions. Since all datasets are checked to be compatible do this only for the first dataset
 		*/
-		hid_t datatype  = H5Dget_type(pos_dataset_id);     // datatype handle
-		H5T_class_t t_class     = H5Tget_class(datatype);
-		H5T_order_t order     = H5Tget_order(datatype);
 
-		size_t size_datatype  = H5Tget_size(datatype);
 		hid_t dataspace_id = H5Dget_space(pos_dataset_id);	//dataspace handle
 		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
 		hsize_t dims_out[rank_dataset];
@@ -162,7 +159,7 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 		file->natoms += dims_out[1];
 		groups[file->ngroups-1].nspacedims = dims_out[2];
 		groups[file->ngroups-1].natoms_group=dims_out[1];
-		groups[file->ngroups-1].group_path=strdup(group_name);
+		groups[file->ngroups-1].group_path=mystrdup(group_name);
 		H5Sclose(dataspace_id);
 
 		file->groups=groups;
@@ -309,7 +306,7 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 }
 
 int search_current_index_of_particle_id(idmapper_node* root, int id){
-	int current_index_of_particle_id;
+	int current_index_of_particle_id=-1;
 	if(root==NULL){
 		printf("ERROR: id not found in tree or no correct root provided\n");
 		return -1;
@@ -317,7 +314,7 @@ int search_current_index_of_particle_id(idmapper_node* root, int id){
 		current_index_of_particle_id= search_current_index_of_particle_id(root->left,id);
 	}else if(id>root->id){
 		current_index_of_particle_id= search_current_index_of_particle_id(root->right,id);
-	}else if(root->id==id){
+	}else{
 		current_index_of_particle_id= root->current_index_in_dataset;
 	}
 	return current_index_of_particle_id;
@@ -375,7 +372,7 @@ void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number,
 			* Read data from hyperslab in the file into the hyperslab in memory
 			*/
 			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-			int status=H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
+			H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
 			H5Sclose(memspace_id); //close resources
 			H5Sclose(dataspace_id_id);
 			//use id data to sort particle positions (use binary tree)
@@ -502,7 +499,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 			* Read data from hyperslab in the file into the hyperslab in memory
 			*/
 			hid_t wanted_memory_datatype_images = H5T_NATIVE_INT;
-			int status=H5Dread(file->groups[i].image_dataset_id, wanted_memory_datatype_images, memspace_id_images, dataspace_image_id, H5P_DEFAULT, data_out_local_image); 
+			H5Dread(file->groups[i].image_dataset_id, wanted_memory_datatype_images, memspace_id_images, dataspace_image_id, H5P_DEFAULT, data_out_local_image); 
 			H5Sclose(memspace_id); //close resources
 			H5Sclose(dataspace_image_id);
 			//////////////
@@ -1220,6 +1217,7 @@ int get_fill_value(struct h5md_file* file, char* absolute_name_of_dataset, void*
 		break;
 		}
 		default:
+			status=-1;
 			printf("datatype not implemented\n");
 		break;
 	}
@@ -1387,4 +1385,10 @@ float calculate_angle_between_vectors(float* vector1, float* vector2, int dimens
 	float len_vector2=calculate_length_of_vector(vector2, dimensions);
 	angle=acos(angle/(len_vector1*len_vector2))*180/PI;	//*180/PI converts radian to degree
 	return angle;
+}
+
+char* mystrdup(char* str) {
+	char* new_str=(char*) malloc((strlen(str)+1)*sizeof(char));
+	strcpy(new_str,str);
+	return new_str;
 }
