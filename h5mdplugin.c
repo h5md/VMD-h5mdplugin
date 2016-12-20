@@ -64,7 +64,7 @@ static void *open_h5md_read(const char *filename, const char *filetype, int *nat
 /* read the coordinates */
 static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	struct h5md_file* file=_file;
-	int status;
+	int status=MOLFILE_SUCCESS;
 	if (ts != NULL ) { //skip reading if ts is NULL pointer (needs modification of the timestep below)
 		//read boxinformation
 		float box_information[6];

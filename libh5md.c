@@ -478,7 +478,7 @@ int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords){
 			dataset_slab_count_images[0] = 1;
 			dataset_slab_count_images[1] = file->groups[i].natoms_group;
 			dataset_slab_count_images[2] = file->groups[i].nspacedims;
-			H5Sselect_hyperslab(file->groups[i].image_dataset_id, H5S_SELECT_SET, dataset_slab_offset_images, NULL, dataset_slab_count_images, NULL);
+			H5Sselect_hyperslab(dataspace_image_id, H5S_SELECT_SET, dataset_slab_offset_images, NULL, dataset_slab_count_images, NULL);
 
 			/*
 			* Define memory dataspace.
