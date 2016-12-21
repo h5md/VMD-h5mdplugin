@@ -221,6 +221,7 @@ int h5md_close(struct h5md_file* file){
 			}
 			free(file->groups);
 		}
+		H5Fflush(file->file_id,H5F_SCOPE_GLOBAL);
 		H5Fclose(file->file_id);
 		free(file);	//free h5md_file struct
 
@@ -1138,9 +1139,7 @@ int h5md_write_dataset(struct h5md_file *file, char* absolute_name_of_dataset, h
 int h5md_append_dataset(struct h5md_file *file, char* absolute_name_of_dataset, hid_t datatype, void* data_in, int rank_in, hsize_t* dims_in){
 	int status;
 	//check existence of dataset
-	h5md_hide_hdf5_error_messages();
 	hid_t dataset_id = H5Dopen2(file->file_id, absolute_name_of_dataset, H5P_DEFAULT);
-	h5md_show_hdf5_error_messages();
 	if(dataset_id>0){
 		hid_t datatype_read  = H5Dget_type(dataset_id);     // datatype handle
 		H5T_class_t type_class_read     = H5Tget_class(datatype_read);
