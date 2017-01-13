@@ -285,6 +285,7 @@ typedef struct _idmapper_node{
 	struct _idmapper_node* right;
 }idmapper_node;
 
+int file_contains_variable_number_of_particles=FALSE;
 
 idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_dataset){
 	if(root==NULL){
@@ -301,7 +302,8 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 		printf("ERROR: id dataset is not unique\n");
 		return NULL;
 	}else if(id<0){
-		//ignore negative ids, this is typically a hint for a file which contains a variable number of particles from a grand canonical simulation.
+		//NOTE: Found negative id in id dataset. This is typically a hint for a file which contains a variable number of particles from a grand canonical simulation.
+		int file_contains_variable_number_of_particles=TRUE;
 	}
 	return root;
 }
@@ -309,7 +311,8 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 int search_current_index_of_particle_id(idmapper_node* root, int id){
 	int current_index_of_particle_id=-1;
 	if(root==NULL){
-		printf("ERROR: id not found in tree or no correct root provided\n");
+		if(file_contains_variable_number_of_particles==TRUE)
+			printf("ERROR: id not found in tree or no correct root provided. id %d is not unique. \n", id);
 		return -1;
 	}else if(id<root->id){
 		current_index_of_particle_id= search_current_index_of_particle_id(root->left,id);
