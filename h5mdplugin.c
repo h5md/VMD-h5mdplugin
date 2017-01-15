@@ -171,7 +171,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/resname",&len_data_resname);
 	//load species
 	float* data_species_float;
-	H5T_class_t type_class_species=H5T_INTEGER;
+	H5T_class_t type_class_species=H5T_FLOAT;
 	char* species_property="species";
 	int status_read_species=h5md_get_all_infromation_about_property(file,species_property ,(void**) &data_species_float);
 	int data_species[natoms];
