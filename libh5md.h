@@ -25,23 +25,20 @@ const char* h5md_error(struct h5md_file* file);
 // go to the i'th timestep
 int h5md_seek_timestep(struct h5md_file* file, int i);
 
-// reads the next timestep of all groups, allocates coords and sets natoms to the number of atoms
-int h5md_get_timestep(struct h5md_file* file, int* natoms, float **coords);
+// reads the next timestep of all groups
+int h5md_get_timestep(struct h5md_file* file, float *coords);
+
+//reads all information regarding a given timeindependent property TODO generalize to timedependent properties, should be easy
+int h5md_get_all_infromation_about_property(struct h5md_file *file, char* property, void** infromation_out);
+
+//unfold the positions using image data
+int h5md_unfold_positions(struct h5md_file* file, float* unsorted_folded_pos);
+
+//sort data according to id datasets
+int h5md_sort_data_according_to_id_datasets(struct h5md_file* file, float* to_be_sorted_data);
 
 //reads all box informations of all groups, returns only the box information of the first group (since VMD doesn't support more than one box per file), the returned array has length 6 (3 lengths: A, B, C, and 3 angles alpha, beta, gamma)
 int h5md_get_box_information(struct h5md_file* file, float* out_box_information);
-
-//reads species information of all groups, allocates species_infromation_out
-int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infromation_out);
-
-//reads mass information of all groups, allocates mass_infromation_out
-int h5md_get_all_mass_infromation(struct h5md_file *file, float** mass_infromation_out);
-
-//reads charge information of all groups, allocates charge_infromation_out
-int h5md_get_all_charge_infromation(struct h5md_file *file, float** charge_infromation_out);
-
-// reads the next timestep of all groups and writes the data to coords iff natoms is the number of atoms in the timestep
-int h5md_read_timestep(struct h5md_file* file, int natoms, float* coords);
 
 //reads the number of atoms
 int h5md_get_natoms(struct h5md_file* file, int* natoms);
