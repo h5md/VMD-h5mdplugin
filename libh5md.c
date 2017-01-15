@@ -194,7 +194,7 @@ int h5md_open(struct h5md_file** _file, const char *filename, int can_write){
 		file->file_id = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT); //read&write access
 	else
 		file->file_id = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
-	h5md_hide_hdf5_error_messages();
+	//h5md_hide_hdf5_error_messages();
 
 	initialize_h5md_struct(file);
 	discover_all_groups(file);
@@ -303,7 +303,7 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 		return NULL;
 	}else if(id<0){
 		//NOTE: Found negative id in id dataset. This is typically a hint for a file which contains a variable number of particles from a grand canonical simulation.
-		int file_contains_variable_number_of_particles=TRUE;
+		file_contains_variable_number_of_particles=TRUE;
 	}
 	return root;
 }
@@ -311,7 +311,7 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 int search_current_index_of_particle_id(idmapper_node* root, int id){
 	int current_index_of_particle_id=-1;
 	if(root==NULL){
-		if(file_contains_variable_number_of_particles==TRUE)
+		if(file_contains_variable_number_of_particles==FALSE)
 			printf("ERROR: id not found in tree or no correct root provided. id %d is not unique. \n", id);
 		return -1;
 	}else if(id<root->id){
@@ -395,9 +395,15 @@ void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number,
 			for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
 				int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
 /*				printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, to_be_sorted_data[3*current_index_of_particle_id+0]);*/
-				_data_out_local_pos_sorted[3*particle_id+0]=to_be_sorted_data[3*current_index_of_particle_id+0];
-				_data_out_local_pos_sorted[3*particle_id+1]=to_be_sorted_data[3*current_index_of_particle_id+1];
-				_data_out_local_pos_sorted[3*particle_id+2]=to_be_sorted_data[3*current_index_of_particle_id+2];
+				if(current_index_of_particle_id>=0){
+					_data_out_local_pos_sorted[3*particle_id+0]=to_be_sorted_data[3*current_index_of_particle_id+0];
+					_data_out_local_pos_sorted[3*particle_id+1]=to_be_sorted_data[3*current_index_of_particle_id+1];
+					_data_out_local_pos_sorted[3*particle_id+2]=to_be_sorted_data[3*current_index_of_particle_id+2];
+				}else{
+					_data_out_local_pos_sorted[3*particle_id+0]=0;
+					_data_out_local_pos_sorted[3*particle_id+1]=0;
+					_data_out_local_pos_sorted[3*particle_id+2]=0;
+				}
 			}
 			//write sorted data back to to_be_sorted_data
 			memcpy(to_be_sorted_data,_data_out_local_pos_sorted,sizeof(float)*3*file->groups[i].natoms_group);
@@ -715,8 +721,12 @@ int h5md_get_box_information(struct h5md_file* file, float* out_box_information)
 
 //read timeindependent dataset automatically
 int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out){
-	int status;
+	int status=-1;
 	hid_t dataset_id = H5Dopen2(file->file_id, dataset_name,H5P_DEFAULT);
+	if(dataset_id<0){
+		//printf("Dataset %s could not be opened.\n", dataset_name);
+		return status;
+	}
 	/*
 	* Get datatype and dataspace handles and then query
 	* dataset class, order, size, rank and dimensions.
@@ -730,85 +740,80 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 	unsigned long long int dims_dataset[rank_dataset];
 	H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
 
-	if(dataset_id<0){
-		//printf("Dataset %s could not be opened.\n", dataset_name);
-		status=-1;
-	}else{
-		switch (*type_class_out) {
-		case H5T_INTEGER:{
-			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-			//determine needed size
-			int needed_size=dims_dataset[0];
-			int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
-			for(int i=1; i<len_dims_dataset; i++){
-				needed_size*=dims_dataset[i];
-			}
-			int* data_out=(int*) malloc(sizeof(size_datatype)*needed_size);
-			int status_read=H5Dread(dataset_id, wanted_memory_datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
-			status=status_read;
-			*(_data_out)=data_out;
-			
-			}
-		break;
-		case H5T_FLOAT:{
-			hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
-			//determine needed size
-			int needed_size=dims_dataset[0];
-			int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
-			for(int i=1; i<len_dims_dataset; i++){
-				needed_size*=dims_dataset[i];
-			}
-			float* data_out=(float*) malloc(sizeof(size_datatype)*needed_size);
-			int status_read=H5Dread(dataset_id, wanted_memory_datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
-			status=status_read;
-			*(_data_out)=data_out;
-			}
-		break;
-		case H5T_STRING:{
-				//load content of name
-				size_datatype++;// Make room for null terminator with which strings are terminated in C
-				/*
-				* Get dataspace and allocate memory for read buffer.  This is a
-				* two dimensional dataset so the dynamic allocation must be done
-				* in steps for fixed-length strings, for variable-length strings HDF5 does some stuff
-				*/
-				H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
-				// Allocate array of pointers to rows.
-				char **data_out = (char **) malloc (dims_dataset[0] * sizeof (char *));
-
-				if(H5Tis_variable_str(datatype)==0){
-					//string length is variable
-					// Allocate space for data.
-					data_out[0] = (char *) malloc (dims_dataset[0] * size_datatype);
-					// Set the rest of the pointers to rows to the correct addresses.
-					for (int i=1; i<dims_dataset[0]; i++)
-						data_out[i] = data_out[0] + i * size_datatype;
-					//Create the memory datatype.
-					hid_t memtype = H5Tcopy (H5T_C_S1);
-					H5Tset_size (memtype, size_datatype);
-					int status_read=H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out[0]);
-					status=status_read;
-					H5Tclose (memtype); //close memtype
-				}else{
-					//string length is fixed
-					//Create the memory datatype.
-					hid_t memtype = H5Tcopy (H5T_C_S1);
-					H5Tset_size (memtype, H5T_VARIABLE);
-					int status_read=H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
-					status=status_read;
-					H5Tclose (memtype); //close memtype
-				}
-
-				*(_data_out)=data_out;
-			}
-		break;
-
-		default:{
-				printf("Dataset contains datatype that is not H5T_INTEGER, H5T_FLOAT or H5T_STRING. Not implemented case.\n");
-				status=-1;
-			}
-		break;
+	switch (*type_class_out) {
+	case H5T_INTEGER:{
+		hid_t wanted_memory_datatype = H5T_NATIVE_INT;
+		//determine needed size
+		int needed_size=dims_dataset[0];
+		int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
+		for(int i=1; i<len_dims_dataset; i++){
+			needed_size*=dims_dataset[i];
 		}
+		int* data_out=(int*) malloc(sizeof(size_datatype)*needed_size);
+		int status_read=H5Dread(dataset_id, wanted_memory_datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+		status=status_read;
+		*(_data_out)=data_out;
+		
+		}
+	break;
+	case H5T_FLOAT:{
+		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
+		//determine needed size
+		int needed_size=dims_dataset[0];
+		int len_dims_dataset=sizeof(dims_dataset)/sizeof(dims_dataset[0]);
+		for(int i=1; i<len_dims_dataset; i++){
+			needed_size*=dims_dataset[i];
+		}
+		float* data_out=(float*) malloc(sizeof(size_datatype)*needed_size);
+		int status_read=H5Dread(dataset_id, wanted_memory_datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+		status=status_read;
+		*(_data_out)=data_out;
+		}
+	break;
+	case H5T_STRING:{
+			//load content of name
+			size_datatype++;// Make room for null terminator with which strings are terminated in C
+			/*
+			* Get dataspace and allocate memory for read buffer.  This is a
+			* two dimensional dataset so the dynamic allocation must be done
+			* in steps for fixed-length strings, for variable-length strings HDF5 does some stuff
+			*/
+			H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
+			// Allocate array of pointers to rows.
+			char **data_out = (char **) malloc (dims_dataset[0] * sizeof (char *));
+
+			if(H5Tis_variable_str(datatype)==0){
+				//string length is variable
+				// Allocate space for data.
+				data_out[0] = (char *) malloc (dims_dataset[0] * size_datatype);
+				// Set the rest of the pointers to rows to the correct addresses.
+				for (int i=1; i<dims_dataset[0]; i++)
+					data_out[i] = data_out[0] + i * size_datatype;
+				//Create the memory datatype.
+				hid_t memtype = H5Tcopy (H5T_C_S1);
+				H5Tset_size (memtype, size_datatype);
+				int status_read=H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out[0]);
+				status=status_read;
+				H5Tclose (memtype); //close memtype
+			}else{
+				//string length is fixed
+				//Create the memory datatype.
+				hid_t memtype = H5Tcopy (H5T_C_S1);
+				H5Tset_size (memtype, H5T_VARIABLE);
+				int status_read=H5Dread (dataset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_out);
+				status=status_read;
+				H5Tclose (memtype); //close memtype
+			}
+
+			*(_data_out)=data_out;
+		}
+	break;
+
+	default:{
+			printf("Dataset contains datatype that is not H5T_INTEGER, H5T_FLOAT or H5T_STRING. Not implemented case.\n");
+			status=-1;
+		}
+	break;
 	}
 
 	//close resources
@@ -890,11 +895,16 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 	//derived from h5md_get_timestep() above
 	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
+	int status=10;
 	int* data_out= malloc(sizeof(int)*file->natoms); //allocate space for data in memory, which have the order data_out[atom_nr]
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
 		hid_t dataspace_id=H5Dget_space(file->groups[i].species_dataset_id); //Define dataset dataspace in file.
+		if(dataspace_id<0){
+			status=-1;
+			return status;
+		}
 
 		/* 
 		* Define hyperslab in the dataset. 
@@ -930,14 +940,16 @@ int h5md_get_all_species_infromation(struct h5md_file *file, int** species_infro
 		* Read data from hyperslab in the file into the hyperslab in memory
 		*/
 		hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-		H5Dread(file->groups[i].species_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		int current_status=H5Dread(file->groups[i].species_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		if(current_status<0)
+			status=current_status;
 		H5Sclose(memspace_id); //close resources
 		H5Sclose(dataspace_id);
 	}
 	
 
 	*species_infromation_out=data_out;
-	return 0;
+	return status;
 }
 
 
@@ -945,12 +957,16 @@ int h5md_get_all_mass_infromation(struct h5md_file *file, float** mass_infromati
 	//derived from h5md_get_timestep() above
 	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
+	int status=10;
 	float* data_out= malloc(sizeof(float)*file->natoms); //allocate space for data in memory, which have the order data_out[atom_nr]
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
 		hid_t dataspace_id=H5Dget_space(file->groups[i].mass_dataset_id); //Define dataset dataspace in file.
-
+		if(dataspace_id<0){
+			status=-1;
+			return status;
+		}
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
@@ -985,25 +1001,31 @@ int h5md_get_all_mass_infromation(struct h5md_file *file, float** mass_infromati
 		* Read data from hyperslab in the file into the hyperslab in memory
 		*/
 		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
-		H5Dread(file->groups[i].mass_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		int current_status=H5Dread(file->groups[i].mass_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		if(current_status<0)
+			status=current_status;
 		H5Sclose(memspace_id); //close resources
 		H5Sclose(dataspace_id);
 	}
 
 	*mass_infromation_out=data_out;
-	return 0;
+	return status;
 }
 
 int h5md_get_all_charge_infromation(struct h5md_file *file, float** charge_infromation_out){
 	//derived from h5md_get_timestep() above
 	//TODO generalize function to h5md_get_dataset_information_from_all_groups()
 
+	int status=10;
 	float* data_out= malloc(sizeof(float)*file->natoms); //allocate space for data in memory, which have the order data_out[atom_nr]
 
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
 		hid_t dataspace_id=H5Dget_space(file->groups[i].charge_dataset_id); //Define dataset dataspace in file.
-
+		if(dataspace_id<0){
+			status=-1;
+			return status;
+		}
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
@@ -1038,13 +1060,15 @@ int h5md_get_all_charge_infromation(struct h5md_file *file, float** charge_infro
 		* Read data from hyperslab in the file into the hyperslab in memory
 		*/
 		hid_t wanted_memory_datatype = H5T_NATIVE_FLOAT;
-		H5Dread(file->groups[i].charge_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		int current_status=H5Dread(file->groups[i].charge_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id, H5P_DEFAULT, data_out);
+		if(current_status<0)
+			status=current_status;
 		H5Sclose(memspace_id); //close resources
 		H5Sclose(dataspace_id);
 	}
 
 	*charge_infromation_out=data_out;
-	return 0;
+	return status;
 }
 
 

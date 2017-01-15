@@ -14,8 +14,8 @@ HDF5LIBSCplusplus=-lhdf5_cpp -lhdf5
 # plugins/include of the VMD installation directory.
 VMDCPPFLAGS=-I$(VMDDIR)/plugins/include 
 
-#CC=clang #for better warnings
-CC=gcc
+CC=clang #for better warnings
+#CC=gcc
 #compiler switches http://gcc.gnu.org/onlinedocs/gcc-3.4.3/gnat_ugn_unw/Switches-for-gcc.html
 CFLAGS=-Wall -Wuninitialized -std=c99 -O0 -pedantic -fPIC -g
 CPPFLAGS=$(VMDCPPFLAGS) $(HDF5CPPFLAGS)

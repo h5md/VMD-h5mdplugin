@@ -155,15 +155,12 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	//load index of species
 	int* data_index_species;
 	H5T_class_t type_class_index_species;
-	//int status_inedx_species=h5md_read_timeindependent_dataset_int(file, "/parameters/vmd_structure/indexOfSpecies", &data_index_species);
 	int status_index_species=h5md_read_timeindependent_dataset_automatically(file, "/parameters/vmd_structure/indexOfSpecies", (void**) &data_index_species, &type_class_index_species);
-
 	int len_data_index_species;
 	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/indexOfSpecies",&len_data_index_species);
 
 	int len_data_resname;
 	h5md_get_length_of_one_dimensional_dataset(file,"/parameters/vmd_structure/resname",&len_data_resname);
-
 	//load species
 	int* data_species;
 	H5T_class_t type_class_species=H5T_INTEGER;
@@ -173,12 +170,12 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	float* data_mass;
 	H5T_class_t type_class_mass=H5T_FLOAT;
 	int status_read_mass=h5md_get_all_mass_infromation(file, (float**) &data_mass);
-		
+
 	//load charge
 	float* data_charge;
 	H5T_class_t type_class_charge=H5T_FLOAT;
 	int status_read_charge=h5md_get_all_charge_infromation(file, (float**) &data_charge);
-	
+
 	//Declaring variables here since if one would declare them later in the else branch one could not access them to free them later, after the atoms have been assigned to their values
 	char **data_name;
 	int status_read_name=-1;
@@ -207,7 +204,9 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	int natoms;
 	h5md_get_natoms(file, &natoms);
 	
-	int species_check = check_consistency_species_index_of_species(file, len_data_index_species, data_species);
+	int species_check = -1;
+	if(status_read_species>=0)
+		species_check=check_consistency_species_index_of_species(file, len_data_index_species, data_species);
 	if(species_check!=0){
 		printf("NOTE: /parameters/vmd_structure/indexOfSpecies does not contain as much different species as there are species present in the different groups /particles/*/species !\n");
 		printf("Skipping index of species related data.\n");
@@ -231,13 +230,12 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		int index_of_species=-1;
 		if(status_index_species==0 && status_read_species>=0)
 			index_of_species=find_index_of_species(data_index_species,data_species[i],len_data_index_species);
-			
-		if(status_read_type==0 && status_index_species==0)
+		if(status_read_type==0 && status_index_species==0 &&index_of_species>=0)
 			strncpy(atom->type, data_type[index_of_species], 16*sizeof(char));	//set type for atom of species
 		else
 			strncpy(atom->type,default_type,16*sizeof(char));
 		if(status_read_atomicnumber==0 && status_index_species==0){	//set atomicnumber
-			if(data_atomicnumber[index_of_species]<112){
+			if(data_atomicnumber[index_of_species]<112 && index_of_species>=0){
 					atom->atomicnumber = data_atomicnumber[index_of_species]; 	
 			}else{
 				atom->atomicnumber = data_atomicnumber[index_of_species]%112;
@@ -247,19 +245,21 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 		}else{
 			if(status_read_species>=0){
 				atom->atomicnumber = data_species[i]%112;
-			}else
+			}else{
 				atom->atomicnumber = default_atomicnumber;
+			}
 		}
-		if (status_read_name==0 && status_index_species==0){
+		if (status_read_name==0 && status_index_species==0 && index_of_species>=0){
 			strncpy(atom->name,data_name[index_of_species],16*sizeof(char));	//set elementname for atom of species
 		}
-		else
+		else{
 			strncpy(atom->name,element_symbols[atom->atomicnumber],16*sizeof(char));
-		if(status_read_mass==0 && status_index_species==0)
+		}
+		if(status_read_mass==0 && status_index_species==0 && index_of_species>=0)
 			atom->mass = data_mass[index_of_species];	//set mass for atom of species
 		else
 			atom->mass=default_mass;
-		if(status_read_radius==0 && status_index_species==0)	
+		if(status_read_radius==0 && status_index_species==0 && index_of_species>=0)	
 			atom->radius = data_radius[index_of_species];	//set radius for atom of species
 		else
 			atom->radius=default_radius;
