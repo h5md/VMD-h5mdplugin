@@ -248,8 +248,8 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 			strncpy(atom->type, data_type[index_of_species], 16*sizeof(char));	//set type for atom of species
 		else
 			strncpy(atom->type,default_type,16*sizeof(char));
-		if(status_read_atomicnumber==0 && status_index_species==0){	//set atomicnumber
-			if(data_atomicnumber[index_of_species]<112 && index_of_species>=0){
+		if(status_read_atomicnumber==0 && status_index_species==0 &&index_of_species>=0){	//set atomicnumber
+			if(data_atomicnumber[index_of_species]<112 ){
 					atom->atomicnumber = data_atomicnumber[index_of_species]; 	
 			}else{
 				atom->atomicnumber = data_atomicnumber[index_of_species]%112;
