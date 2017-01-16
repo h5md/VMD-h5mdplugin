@@ -82,7 +82,6 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 		ts->velocities = NULL;
 		ts->physical_time = 0.0;
 		//read coords
-		ts->coords=(float*) malloc(sizeof(float)*natoms * 3); //allocate space for data in memory, which have the order data_out[3*atom_nr+coord_i] Remark: 3 could be the maximum over i of file->groups[i].nspacedims
 		h5md_get_timestep(file, ts->coords);
 		h5md_unfold_positions(file, ts->coords);
 		h5md_sort_data_according_to_id_datasets(file, ts->coords);
