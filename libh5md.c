@@ -14,6 +14,8 @@
 #define FALSE	0
 #define PI 3.14159265
 
+//#define DEBUG 0
+
 /*
 Return value 0 means everything is fine
 */
@@ -51,7 +53,6 @@ struct h5md_file{
 	int ntime;
 	char *last_error_message;
 	int current_time;	//for h5md_seek_timestep()
-	int correction_timestep_VMD_counting;
 };
 
 
@@ -174,6 +175,8 @@ int modify_information_about_file_content(struct h5md_file* file, char* group_na
 
 
 int check_compatibility(struct h5md_file* file, hid_t new_pos_dataset_id){
+	if(new_pos_dataset_id<0)
+		return -1;
 	hid_t new_dataspace = H5Dget_space(new_pos_dataset_id);	//dataspace handle
 	int new_rank_dataset = H5Sget_simple_extent_ndims(new_dataspace);
 	hsize_t dims_out[new_rank_dataset];
@@ -194,7 +197,6 @@ int h5md_open(struct h5md_file** _file, const char *filename, int can_write){
 		file->file_id = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT); //read&write access
 	else
 		file->file_id = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
-	//h5md_hide_hdf5_error_messages();
 
 	initialize_h5md_struct(file);
 	discover_all_groups(file);
@@ -272,6 +274,7 @@ int h5md_seek_timestep(struct h5md_file* file, int i){
 		file->current_time=i;
 		return 0;
 	}else{
+		file->current_time=i;
 		return -1;
 	}
 }
@@ -294,16 +297,18 @@ idmapper_node* insert_id(idmapper_node* root, int id, int current_index_in_datas
 		root->current_index_in_dataset=current_index_in_dataset;
 		root->left=NULL;
 		root->right=NULL;
-	}else if(id<root->id){
-		root->left=insert_id(root->left,id,current_index_in_dataset);
-	}else if(id>root->id){
-		root->right=insert_id(root->right,id,current_index_in_dataset);
-	}else if(id==root->id && id>=0){
-		printf("ERROR: id dataset is not unique\n");
-		return NULL;
-	}else if(id<0){
-		//NOTE: Found negative id in id dataset. This is typically a hint for a file which contains a variable number of particles from a grand canonical simulation.
-		file_contains_variable_number_of_particles=TRUE;
+	}else{ 
+		if(id<root->id){
+			root->left=insert_id(root->left,id,current_index_in_dataset);
+		}else if(id>root->id){
+			root->right=insert_id(root->right,id,current_index_in_dataset);
+		}else if(id==root->id && id>=0){
+			printf("ERROR: id dataset is not unique in id %d, current index in dataset %d\n", id, current_index_in_dataset);
+			return NULL;
+		}else if(id<0){
+			//NOTE: Found negative id in id dataset. This is typically a hint for a file which contains a variable number of particles from a grand canonical simulation.
+			file_contains_variable_number_of_particles=TRUE;
+		}
 	}
 	return root;
 }
@@ -333,82 +338,67 @@ void free_binary_tree_idmapper(idmapper_node* root){
 }
 
 void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number, float* to_be_sorted_data){
-		int i= group_number;
-		/////////////////
-		//read in id_data of group
-		if(file->groups[i].id_dataset_id>0){
-			int data_out_local_id[file->groups[i].natoms_group];
-			hid_t dataspace_id_id=H5Dget_space(file->groups[i].id_dataset_id); //Define dataset dataspace (for id_dataset) in file.
+	#if defined DEBUG
+	h5md_show_hdf5_error_messages();
+	#endif
+	int i= group_number;
+	/////////////////
+	//read in id_data of group
+	if(file->groups[i].id_dataset_id>0){
+		int data_out_local_id[file->groups[i].natoms_group];
+		hid_t dataspace_id_id=H5Dget_space(file->groups[i].id_dataset_id); //Define dataset dataspace (for id_dataset) in file.
+		/* 
+		* Define hyperslab in the dataset. 
+		*/
+		int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id_id);
+		hsize_t dataset_slab_offset[rank_dataset];
+		dataset_slab_offset[0]=file->current_time;
+		dataset_slab_offset[1]=0;
 
-			/* 
-			* Define hyperslab in the dataset. 
-			*/
-			int rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id_id);
-			hsize_t dataset_slab_offset[rank_dataset];
-			dataset_slab_offset[0] = file->current_time;
-			dataset_slab_offset[1] = 0;
-			dataset_slab_offset[2] = 0;
+		hsize_t dataset_slab_count[rank_dataset];
+		dataset_slab_count[0] = 1;
+		dataset_slab_count[1] = file->groups[i].natoms_group;
+		H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
 
-			hsize_t dataset_slab_count[rank_dataset];
-			dataset_slab_count[0] = 1;
-			dataset_slab_count[1] = file->groups[i].natoms_group;
-			dataset_slab_count[2] = 1;
-			H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
-			/*
-			* Define memory dataspace.
-			*/
-			int rank=1; //linear data representation
-			hsize_t dimsm[rank];
-			dimsm[0]=file->natoms;
-
-			hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
-
-			/* 
-			* Define memory hyperslab. 
-			*/
-			hsize_t offset_out[rank];
-			hsize_t count_out[rank];
-			offset_out[0]=0;
-			count_out[0]=file->groups[i].natoms_group;	
-			H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
-
-			/*
-			* Read data from hyperslab in the file into the hyperslab in memory
-			*/
-			hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-			H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
-			H5Sclose(memspace_id); //close resources
-			H5Sclose(dataspace_id_id);
-			//use id data to sort particle positions (use binary tree)
-			//create binary tree
-			idmapper_node* root=NULL;
-			for(int particle_i=0;particle_i<file->groups[i].natoms_group;particle_i++){
-				if(particle_i==0){
-					//save root of tree
-					root=insert_id(root,data_out_local_id[particle_i],particle_i);
-				}else{
-					insert_id(root,data_out_local_id[particle_i],particle_i);
-				}
+		/*
+		* Read data from hyperslab in the file into the hyperslab in memory
+		*/
+		hid_t wanted_memory_datatype = H5T_NATIVE_INT;
+		H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, H5S_SELECT_SET, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
+		H5Sclose(dataspace_id_id);
+		//use id data to sort particle positions (use binary tree)
+		//create binary tree
+		idmapper_node* root=NULL;
+		for(int particle_i=0;particle_i<file->groups[i].natoms_group;particle_i++){
+			if(particle_i==0){
+				//save root of tree
+				root=insert_id(root,data_out_local_id[particle_i],particle_i);
+			}else{
+				insert_id(root,data_out_local_id[particle_i],particle_i);
 			}
-			//sort data_out_local_pos using the binary tree	
-			float _data_out_local_pos_sorted[3*file->groups[i].natoms_group];
-			for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
-				int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
-/*				printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, to_be_sorted_data[3*current_index_of_particle_id+0]);*/
-				if(current_index_of_particle_id>=0){
-					_data_out_local_pos_sorted[3*particle_id+0]=to_be_sorted_data[3*current_index_of_particle_id+0];
-					_data_out_local_pos_sorted[3*particle_id+1]=to_be_sorted_data[3*current_index_of_particle_id+1];
-					_data_out_local_pos_sorted[3*particle_id+2]=to_be_sorted_data[3*current_index_of_particle_id+2];
-				}else{
-					_data_out_local_pos_sorted[3*particle_id+0]=0;
-					_data_out_local_pos_sorted[3*particle_id+1]=0;
-					_data_out_local_pos_sorted[3*particle_id+2]=0;
-				}
-			}
-			//write sorted data back to to_be_sorted_data
-			memcpy(to_be_sorted_data,_data_out_local_pos_sorted,sizeof(float)*3*file->groups[i].natoms_group);
-			free_binary_tree_idmapper(root);
 		}
+		//sort data_out_local_pos using the binary tree	
+		float _data_out_local_pos_sorted[3*file->groups[i].natoms_group];
+		for(int particle_id=0;particle_id<file->groups[i].natoms_group;particle_id++){
+			int current_index_of_particle_id=search_current_index_of_particle_id(root,particle_id);
+/*				printf("particle with id %d has current index %d at current time %d at x position %f\n", particle_id, current_index_of_particle_id, file->current_time, to_be_sorted_data[3*current_index_of_particle_id+0]);*/
+			if(current_index_of_particle_id>=0){
+				_data_out_local_pos_sorted[3*particle_id+0]=to_be_sorted_data[3*current_index_of_particle_id+0];
+				_data_out_local_pos_sorted[3*particle_id+1]=to_be_sorted_data[3*current_index_of_particle_id+1];
+				_data_out_local_pos_sorted[3*particle_id+2]=to_be_sorted_data[3*current_index_of_particle_id+2];
+			}else{
+				_data_out_local_pos_sorted[3*particle_id+0]=0;
+				_data_out_local_pos_sorted[3*particle_id+1]=0;
+				_data_out_local_pos_sorted[3*particle_id+2]=0;
+			}
+		}
+		//write sorted data back to to_be_sorted_data
+		memcpy(to_be_sorted_data,_data_out_local_pos_sorted,sizeof(float)*3*file->groups[i].natoms_group);
+		free_binary_tree_idmapper(root);
+	}
+	#if defined DEBUG
+	h5md_hide_hdf5_error_messages();
+	#endif
 }
 
 int h5md_sort_data_according_to_id_datasets(struct h5md_file* file, float* to_be_sorted_data){
@@ -424,6 +414,9 @@ int h5md_sort_data_according_to_id_datasets(struct h5md_file* file, float* to_be
 
 // reads the next timestep
 int h5md_get_timestep(struct h5md_file* file, float *coords){
+	#if defined DEBUG
+	h5md_show_hdf5_error_messages();
+	#endif
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
 		/////////////////
@@ -434,6 +427,8 @@ int h5md_get_timestep(struct h5md_file* file, float *coords){
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
+		if(dataspace_pos_id<0)
+			continue;
 
 		int rank_dataset      = file->groups[i].nspacedims;
 		hsize_t dataset_slab_offset[rank_dataset];
@@ -480,12 +475,17 @@ int h5md_get_timestep(struct h5md_file* file, float *coords){
 		previous_atoms+=file->groups[i].natoms_group;
 
 	}
-
+	#if defined DEBUG
+	h5md_hide_hdf5_error_messages();
+	#endif
 	return 0;
 }
 
 //this function unfolds the *unsorted* position data
 int h5md_unfold_positions(struct h5md_file* file, float* unsorted_folded_pos){
+	#if defined DEBUG
+	h5md_show_hdf5_error_messages();
+	#endif
 	int previous_atoms=0;
 	for(int i=0; i<file->ngroups; i++){//go through all groups
 		/////////////////
@@ -493,6 +493,8 @@ int h5md_unfold_positions(struct h5md_file* file, float* unsorted_folded_pos){
 		int data_out_local_image[file->groups[i].natoms_group*file->groups[i].nspacedims];
 		if(file->groups[i].image_dataset_id>0){
 			hid_t dataspace_image_id=H5Dget_space(file->groups[i].image_dataset_id); //Define dataset dataspace (for image_dataset) in file.
+			if(dataspace_image_id<0)
+				continue;
 			/* 
 			* Define hyperslab in the dataset. 
 			*/	
@@ -550,6 +552,9 @@ int h5md_unfold_positions(struct h5md_file* file, float* unsorted_folded_pos){
 			}
 		}
 	}
+	#if defined DEBUG
+	h5md_hide_hdf5_error_messages();
+	#endif
 	return 0;
 }
 
@@ -711,6 +716,9 @@ int h5md_get_box_information(struct h5md_file* file, float* out_box_information)
 
 //read timeindependent dataset automatically
 int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char* dataset_name, void** _data_out, H5T_class_t* type_class_out){
+	#if defined DEBUG
+	h5md_show_hdf5_error_messages();
+	#endif
 	int status=-1;
 	hid_t dataset_id = H5Dopen2(file->file_id, dataset_name,H5P_DEFAULT);
 	if(dataset_id<0){
@@ -810,78 +818,16 @@ int h5md_read_timeindependent_dataset_automatically(struct h5md_file* file, char
 	H5Dclose (dataset_id);
 	H5Sclose (dataspace_id);
 	H5Tclose (datatype);
+	#if defined DEBUG
+	h5md_hide_hdf5_error_messages();
+	#endif
 	return status;
 }
 
-int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out, int length_array_of_strings){
-	switch (type_class) {
-	case H5T_INTEGER:	//stacking case conditions before break produces OR condition
-	case H5T_FLOAT:
-		free(old_data_out);
-	break;
-	case H5T_STRING:{//TODO differentiate between fixed and variable length strings for correct free
-
-//The following is only for variable length strings
-/*		char** old_data_string= (char**) old_data_out;*/
-/*		for(int i=0;i<length_array_of_strings;i++){*/
-/*			free(((char**)old_data_out)[i]);*/
-/*		}*/
-
-//This is only for fixed length strings
-		free(((char**)old_data_out)[0]);
-		free(old_data_out); 
-	}
-	break;
-	}
-
-	return 0;
-
-}
-
-int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_name, int ** _data_out){
-	H5T_class_t type_class_out;
-	int status_read=h5md_read_timeindependent_dataset_automatically(file, dataset_name, (void**)_data_out, &type_class_out);
-
-	if( (status_read!=0) )
-		return -1;
-	else
-		return 0;
-}
-
-int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *dataset_name, int *length_of_dataset){
-	hid_t dataset_id = H5Dopen2(file->file_id, dataset_name,H5P_DEFAULT);
-	hid_t dataspace_id = H5Dget_space(dataset_id);    /* dataspace handle */
-	hsize_t rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
-	unsigned long long int dims_dataset[rank_dataset];
-	H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
-	if(rank_dataset==1){
-
-		*length_of_dataset=dims_dataset[0];
-		return 0;
-	}else{
-/*		printf("Dataset %s is not one dimensional.\n", dataset_name);	*/
-		return -1;
-	}
-}
-
-
-void h5md_hide_hdf5_error_messages(){
-	H5Eset_auto(H5E_DEFAULT, NULL, NULL);
-}
-
-void h5md_show_hdf5_error_messages(){
-	H5Eset_auto(H5E_DEFAULT, (H5E_auto_t) H5Eprint, stderr);
-}
-
-int h5md_get_file_id(struct h5md_file *file, hid_t *file_id){
-	*file_id=file->file_id;
-	if(file_id !=0)
-		return 0;
-	else
-		return -1;
-}
-
 int h5md_get_all_infromation_about_property(struct h5md_file *file, char* property, void** infromation_out){
+	#if defined DEBUG
+	h5md_show_hdf5_error_messages();
+	#endif
 	int status=0;
 	float* data_out= malloc(sizeof(float)*file->natoms); //allocate space for data in memory, which have the order data_out[atom_nr]
 
@@ -898,13 +844,12 @@ int h5md_get_all_infromation_about_property(struct h5md_file *file, char* proper
 		if(strcmp(property,"species")==0){
 			dataset_id=file->groups[i].species_dataset_id;
 		}
-
-
-		dataspace_id=H5Dget_space(dataset_id); //Define dataset dataspace in file.
-		if(dataspace_id<0){
+		if(dataset_id<0){
 			status=-1;
 			return status;
 		}
+
+		dataspace_id=H5Dget_space(dataset_id); //Define dataset dataspace in file.
 		/* 
 		* Define hyperslab in the dataset. 
 		*/
@@ -947,7 +892,80 @@ int h5md_get_all_infromation_about_property(struct h5md_file *file, char* proper
 	}
 
 	*infromation_out=(void*) data_out;
+	#if defined DEBUG
+	h5md_hide_hdf5_error_messages();
+	#endif
 	return status;
+}
+
+int h5md_free_timeindependent_dataset_automatically(H5T_class_t type_class, void* old_data_out, int length_array_of_strings){
+	switch (type_class) {
+	case H5T_INTEGER:	//stacking case conditions before break produces OR condition
+	case H5T_FLOAT:
+		free(old_data_out);
+	break;
+	case H5T_STRING:{//TODO differentiate between fixed and variable length strings for correct free
+
+//The following is only for variable length strings
+/*		char** old_data_string= (char**) old_data_out;*/
+/*		for(int i=0;i<length_array_of_strings;i++){*/
+/*			free(((char**)old_data_out)[i]);*/
+/*		}*/
+
+//This is only for fixed length strings
+		free(((char**)old_data_out)[0]);
+		free(old_data_out); 
+	}
+	break;
+	}
+
+	return 0;
+
+}
+
+int h5md_read_timeindependent_dataset_int(struct h5md_file* file, char* dataset_name, int ** _data_out){
+	H5T_class_t type_class_out;
+	int status_read=h5md_read_timeindependent_dataset_automatically(file, dataset_name, (void**)_data_out, &type_class_out);
+
+	if( (status_read!=0) )
+		return -1;
+	else
+		return 0;
+}
+
+int h5md_get_length_of_one_dimensional_dataset(struct h5md_file *file,char *dataset_name, int *length_of_dataset){
+	hid_t dataset_id = H5Dopen2(file->file_id, dataset_name,H5P_DEFAULT);
+	if(dataset_id<0)
+		return -1;
+	hid_t dataspace_id = H5Dget_space(dataset_id);    /* dataspace handle */
+	hsize_t rank_dataset      = H5Sget_simple_extent_ndims(dataspace_id);
+	unsigned long long int dims_dataset[rank_dataset];
+	H5Sget_simple_extent_dims(dataspace_id, dims_dataset, NULL);
+	if(rank_dataset==1){
+
+		*length_of_dataset=dims_dataset[0];
+		return 0;
+	}else{
+/*		printf("Dataset %s is not one dimensional.\n", dataset_name);	*/
+		return -1;
+	}
+}
+
+
+void h5md_hide_hdf5_error_messages(){
+	H5Eset_auto(H5E_DEFAULT, NULL, NULL);
+}
+
+void h5md_show_hdf5_error_messages(){
+	H5Eset_auto(H5E_DEFAULT, (H5E_auto_t) H5Eprint, stderr);
+}
+
+int h5md_get_file_id(struct h5md_file *file, hid_t *file_id){
+	*file_id=file->file_id;
+	if(file_id !=0)
+		return 0;
+	else
+		return -1;
 }
 
 /* write operations */
@@ -1228,16 +1246,7 @@ int initialize_h5md_struct(struct h5md_file* file){
 	file->ntime=0;
 	file->last_error_message="";
 	file->natoms=0;
-	file->correction_timestep_VMD_counting=0;
 	return 0;
-}
-
-void h5md_set_correction_for_VMD_counting_timesteps(struct h5md_file* file){
-	file->correction_timestep_VMD_counting=1;
-}
-
-int h5md_get_correction_for_VMD_counting_timesteps(struct h5md_file* file){
-	return file->correction_timestep_VMD_counting;
 }
 
 int max(int a, int b){
