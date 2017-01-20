@@ -210,7 +210,7 @@ int test_appending_to_dataset_position_style(){//depends on test_create_file() s
 					{1, 1, 1.6} };
 	hid_t datatype3= H5T_NATIVE_FLOAT;
 
-	h5md_append_dataset(file, "/testappend", datatype3, (void*) data_in3, rank_in3, dims_in3);
+	h5md_append_dataset(file, "testappend", datatype3, (void*) data_in3, rank_in3, dims_in3);
 
 
 	int rank_in4=3; //should be 3 for positions : time_i, atom_i, x_i
@@ -219,7 +219,7 @@ int test_appending_to_dataset_position_style(){//depends on test_create_file() s
 					{5, 6.0, 2},
 					{5, 5, 5.6} };
 	hid_t datatype4= H5T_NATIVE_FLOAT;
-	int status=h5md_append_dataset(file, "/testappend", datatype4, (void*) data_in4, rank_in4, dims_in4);
+	int status=h5md_append_dataset(file, "testappend", datatype4, (void*) data_in4, rank_in4, dims_in4);
 	h5md_close(file);
 	return status;
 }
@@ -299,12 +299,12 @@ int test_appending_to_onedimensional_string_dataset(){
 }
 
 
-int test_h5md_read_timestep(){
+int test_h5md_get_timestep(){
 	struct h5md_file* file;
  	h5md_open(&file, "../samples/full_vmd_structure.h5", -1);
 	h5md_seek_timestep(file, 1);
-	float* coords= (float*) malloc(100*3*sizeof(float));
-	h5md_read_timestep(file, 100, coords);
+	float* coords= (float*) malloc(3*sizeof(float));
+	h5md_get_timestep(file, coords);
 	int status;
 	if(coords[3*2+0]-0.109156<0.0001)
 		status= 0;

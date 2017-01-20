@@ -54,8 +54,8 @@ TEST(h5mdWriteTest, test_get_fill_value_float) {
 	EXPECT_EQ(-1, test_get_fill_value_float());
 }
 
-TEST(h5mdReadTest, test_read_timestep){
-	EXPECT_EQ(0, test_h5md_read_timestep());
+TEST(h5mdReadTest, test_h5md_get_timestep){
+	EXPECT_EQ(0, test_h5md_get_timestep());
 }
 
 

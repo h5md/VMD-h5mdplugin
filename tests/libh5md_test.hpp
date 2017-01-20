@@ -1,7 +1,7 @@
 #ifndef GTEST_LIBH5MD_H_
 #define GTEST_LIBH5MD_H_
 
-int test_h5md_read_timestep();
+int test_h5md_get_timestep();
 int test_create_file();
 int test_write_file_with_datasets();
 int test_write_fixed_length_string_dataset();

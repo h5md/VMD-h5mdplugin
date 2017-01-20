@@ -344,7 +344,7 @@ void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number,
 	int i= group_number;
 	/////////////////
 	//read in id_data of group
-	if(file->groups[i].id_dataset_id>0){
+	if(file->groups[i].id_dataset_id>=0){
 		int data_out_local_id[file->groups[i].natoms_group];
 		hid_t dataspace_id_id=H5Dget_space(file->groups[i].id_dataset_id); //Define dataset dataspace (for id_dataset) in file.
 		/* 
@@ -354,17 +354,37 @@ void sort_data_according_to_id_dataset(struct h5md_file* file, int group_number,
 		hsize_t dataset_slab_offset[rank_dataset];
 		dataset_slab_offset[0]=file->current_time;
 		dataset_slab_offset[1]=0;
+		if(rank_dataset==3)
+			dataset_slab_offset[2]=0;
 
 		hsize_t dataset_slab_count[rank_dataset];
 		dataset_slab_count[0] = 1;
 		dataset_slab_count[1] = file->groups[i].natoms_group;
+		if(rank_dataset==3)
+			dataset_slab_count[2]=1;
 		H5Sselect_hyperslab(dataspace_id_id, H5S_SELECT_SET, dataset_slab_offset, NULL, dataset_slab_count, NULL);
+		/*
+		* Define memory dataspace.
+		*/
+		int rank=1; //linear data representation
+		hsize_t dimsm[rank];
+		dimsm[0]=file->groups[i].natoms_group;
 
+		hid_t memspace_id = H5Screate_simple(rank,dimsm,NULL);
+
+		/* 
+		* Define memory hyperslab. 
+		*/
+		hsize_t offset_out[rank];
+		hsize_t count_out[rank];
+		offset_out[0]=0;
+		count_out[0]=file->groups[i].natoms_group;	
+		H5Sselect_hyperslab(memspace_id, H5S_SELECT_SET, offset_out, NULL, count_out, NULL);
 		/*
 		* Read data from hyperslab in the file into the hyperslab in memory
 		*/
 		hid_t wanted_memory_datatype = H5T_NATIVE_INT;
-		H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, H5S_SELECT_SET, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
+		H5Dread (file->groups[i].id_dataset_id, wanted_memory_datatype, memspace_id, dataspace_id_id, H5P_DEFAULT, data_out_local_id); 
 		H5Sclose(dataspace_id_id);
 		//use id data to sort particle positions (use binary tree)
 		//create binary tree
@@ -491,7 +511,7 @@ int h5md_unfold_positions(struct h5md_file* file, float* unsorted_folded_pos){
 		/////////////////
 		//read in image_data of group
 		int data_out_local_image[file->groups[i].natoms_group*file->groups[i].nspacedims];
-		if(file->groups[i].image_dataset_id>0){
+		if(file->groups[i].image_dataset_id>=0){
 			hid_t dataspace_image_id=H5Dget_space(file->groups[i].image_dataset_id); //Define dataset dataspace (for image_dataset) in file.
 			if(dataspace_image_id<0)
 				continue;
@@ -572,7 +592,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 	hid_t box_timeindependent_dataset_id=H5Dopen2(file->file_id, full_path_box_dataset_timeindependent ,H5P_DEFAULT);
 
 
-	if(box_timedependent_dataset_id>0){
+	if(box_timedependent_dataset_id>=0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
 		float *data_box = malloc(file->ntime*3*3*sizeof(float));
@@ -588,7 +608,7 @@ int get_box_vectors(struct h5md_file* file,  int group_i, int time_i, float* vec
 		vector_c[2]=data_box[time_i*9+8];
 		free (data_box);
 		status=0;
-	}else if(box_timeindependent_dataset_id>0){
+	}else if(box_timeindependent_dataset_id>=0){
 		//read timeindependent dataset
 		//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
 		int dims_box;
@@ -660,7 +680,7 @@ int get_box_information(struct h5md_file* file, int group_number, int time_i, h5
 	float vector_a[3];
 	float vector_b[3];
 	float vector_c[3];
-	if(box_timedependent_dataset_id>0){
+	if(box_timedependent_dataset_id>=0){
 		//timedependent dataset exists, use it
 		//read timedependent dataset 
 		status=get_box_vectors(file, group_number, time_i, vector_a,vector_b,vector_c);
@@ -673,7 +693,7 @@ int get_box_information(struct h5md_file* file, int group_number, int time_i, h5
 		box->beta= calculate_angle_between_vectors(vector_a,vector_c,3);
 		box->gamma= calculate_angle_between_vectors(vector_a,vector_b,3);
 	}else{
-		if(box_timeindependent_dataset_id>0){
+		if(box_timeindependent_dataset_id>=0){
 			time_i=FALSE;
 			//read timeindependent dataset
 			//decided whether box is cubic (dataset contains a vector) or triclinic (dataset contains a matrix)
@@ -962,7 +982,7 @@ void h5md_show_hdf5_error_messages(){
 
 int h5md_get_file_id(struct h5md_file *file, hid_t *file_id){
 	*file_id=file->file_id;
-	if(file_id !=0)
+	if(file_id != NULL)
 		return 0;
 	else
 		return -1;
@@ -1056,7 +1076,7 @@ int h5md_append_dataset(struct h5md_file *file, char* absolute_name_of_dataset, 
 	int status;
 	//check existence of dataset
 	hid_t dataset_id = H5Dopen2(file->file_id, absolute_name_of_dataset, H5P_DEFAULT);
-	if(dataset_id>0){
+	if(dataset_id>=0){
 		hid_t datatype_read  = H5Dget_type(dataset_id);     // datatype handle
 		H5T_class_t type_class_read     = H5Tget_class(datatype_read);
 		hid_t dataspace_id = H5Dget_space(dataset_id);    //dataspace handle
@@ -1178,7 +1198,7 @@ int h5md_set_author(struct h5md_file* file, char* name, char* email_address){
 		status_email=H5LTset_attribute_string(file->file_id, "/h5md/author", "email", email_address);
 	}
 
-	if( status_name>0 && status_email>0 )
+	if( status_name>=0 && status_email>=0 )
 		return 0;
 	else
 		return -1;
@@ -1204,7 +1224,7 @@ int h5md_set_creator(struct h5md_file* file, char* name, char* version){
 		status_version=H5LTset_attribute_string(file->file_id, "/h5md/creator", "version", version);
 	}
 
-	if(status_name>0  && status_version>0 )
+	if(status_name>=0  && status_version>=0 )
 		return 0;
 	else
 		return -1;

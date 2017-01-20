@@ -71,7 +71,7 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 	h5md_get_ntime(file,&ntime);
 	if(current_time>=ntime)
 		return MOLFILE_ERROR;
-	if ((ts != NULL ||current_time==0)) { //skip reading if ts is NULL pointer (needs modification of the timestep below)
+	if (ts != NULL) { //skip reading if ts is NULL pointer (needs modification of the timestep below)
 		h5md_get_natoms(file, &natoms);
 
 		//read boxinformation
@@ -94,14 +94,12 @@ static int read_h5md_timestep(void *_file, int natoms, molfile_timestep_t *ts) {
 
 	}
 	
-
 	int status_seek=h5md_seek_timestep(file, current_time+1); //modify timestep in the internal state of the plugin for this file
 	if(status_seek!=0){
 		status= MOLFILE_SUCCESS;
 	}else if(status_seek!=0 ){
 		status= MOLFILE_ERROR;
 	}
-
 	return status;
 }
 
@@ -156,7 +154,6 @@ int check_consistency_species_index_of_species(struct h5md_file *file, int len_d
 
 //load whole VMD structure
 int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t *atoms) {
-	printf("read structure\n");
 	molfile_atom_t *atom;
 	*optflags = MOLFILE_ATOMICNUMBER | MOLFILE_MASS | MOLFILE_RADIUS |  MOLFILE_INSERTION | MOLFILE_CHARGE; // we read the optional attributes atomicnumber, mass, radius and charge
 	struct h5md_file* file=_file;
@@ -306,7 +303,7 @@ int read_h5md_structure_vmd_structure(void *_file, int *optflags,molfile_atom_t 
 	//After assignment free used resources
 	if(status_index_species==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_index_species,data_index_species, 0);
-	if(status_read_species==0)	
+	if(status_read_species>=0)	
 		h5md_free_timeindependent_dataset_automatically(type_class_species,data_species_float, 0);
 	if(status_read_name==0)
 		h5md_free_timeindependent_dataset_automatically(type_class_name,data_name, len_data_index_species);
