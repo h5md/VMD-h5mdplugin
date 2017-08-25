@@ -1,10 +1,7 @@
 ############## test related ##############
 # the following can be removed from the makefile and lib and plugin is still built (remove also "gtest_main.o libh5md_unittest" from the make target "all")
 
-#which hdf5 libraries to use
-HDF5LIBS=-lhdf5_hl -lhdf5
-
-CXX=g++
+CXX=h5c++
 CXXFLAGS=-Wall -O0 -fPIC -g
 
 # Points to the root of fused googletest, relative to where this file is. make sure to adjust the 3 needed files (which are the only needed files) in this directory (correct #include "/gtest/gtest.h" to #include "gtest.h" since the header file is found in the same directory)
@@ -51,11 +48,11 @@ libh5md_unittest.o : $(TEST_DIR)/libh5md_unittest.cc \
 
 libh5md_unittest : libh5md_unittest.o libh5md_test.o  gtest-all.o gtest_main.o
 	- cd .. && $(MAKE)
-	-$(CXX) $(CPPFLAGS) $(CXXFLAGS) -Wl,-rpath,$(PARENT_DIR) $^ -o $@ $(HDF5LIBS) -L .. -lh5md
+	-$(CXX) $(CPPFLAGS) $(CXXFLAGS) -Wl,-rpath,$(PARENT_DIR) $^ -o $@ -L .. -lh5md
 	
 	
 clean :
-	-rm *~
-	-rm libh5md_unittest
-	-rm -rf samples
-	-rm *.o
+	$(RM) *~
+	$(RM) libh5md_unittest
+	$(RM) -rf samples
+	$(RM) *.o

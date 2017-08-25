@@ -43,7 +43,7 @@ directory to where you have compiled it):
 
         vmd_plugin_scandirectory /PATH_TO_SO_DIRECTORY/ h5mdplugin.so
 
-Alternatively you may also load the plugin by linking to h5mdplugin.so in the vmd molfile plugins folder (e.g. under .../vmd/plugins/LINUXAMD64/molfile/).
+Alternatively you may also load the plugin by linking h5mdplugin.so and libh5md.so into the vmd molfile plugins folder (e.g. under .../vmd/plugins/LINUXAMD64/molfile/).
 
 Remarks
 -------
