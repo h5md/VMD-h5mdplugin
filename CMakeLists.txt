@@ -6,13 +6,22 @@ set(CMAKE_USER_MAKE_RULES_OVERRIDE "cmake/platform.cmake")
 project(VMD-h5mdplugin C)
 
 find_package(HDF5 REQUIRED COMPONENTS "C" "HL")
-# find_package(VMD REQUIRED)
-# FIXME e.g., https://github.com/gromacs/gromacs/blob/master/cmake/FindVMD.cmake
-set(GMX_VMD_PLUGIN_PATH "$ENV{VMDDIR}/plugins/include" CACHE STRING "Path to VMD plugin headers")
-message(STATUS "VMD plugin path: ${GMX_VMD_PLUGIN_PATH}")
+
+find_program(VMD_EXECUTABLE NAMES vmd PATH_SUFFIXES bin DOC "VMD command")
+if(VMD_EXECUTABLE)
+    file(STRINGS "${VMD_EXECUTABLE}" VMDDIR REGEX "^[^#].*defaultvmddir=.*$")
+    string(REGEX REPLACE "(^.*=\"?|\"$)" "" VMDDIR "${VMDDIR}")
+    set(VMD_PLUGIN_INCLUDE_DIR "${VMDDIR}/plugins/include" CACHE STRING "Path to VMD plugin headers")
+    set(VMD_PLUGIN_PATH "${VMDDIR}/plugins/LINUXAMD64" CACHE STRING "Path to VMD plugin headers")
+    message(STATUS "VMD executable: ${VMD_EXECUTABLE}")
+    message(STATUS "VMD plugin path: ${VMD_PLUGIN_PATH}")
+    message(STATUS "VMD plugin include dir: ${VMD_PLUGIN_INCLUDE_DIR}")
+else()
+    message(FATAL_ERROR "VMD not found, please specify with -DVMD_EXECUTABLE")
+endif()
 
 include_directories("${HDF5_INCLUDE_DIR}")
-include_directories("${GMX_VMD_PLUGIN_PATH}")
+include_directories("${VMD_PLUGIN_INCLUDE_DIR}")
 
 #
 # add H5MD library
@@ -33,6 +42,9 @@ target_link_libraries(h5md
     m
 )
 
+SET (CMAKE_SHARED_LINKER_FLAGS
+    "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,'$ORIGIN'" )
+
 # unset "lib" prefix
 set_target_properties(h5mdplugin PROPERTIES PREFIX "")
 
@@ -41,8 +53,8 @@ target_link_libraries(h5mdplugin
     ${HDF5_LIBRARIES}
 )
 
-install(TARGETS h5mdplugin
-  DESTINATION "$ENV{VMDDIR}/plugins/LINUXAMD64/molfile"
+install(TARGETS h5md h5mdplugin
+  DESTINATION "${VMD_PLUGIN_PATH}/molfile"
 )
 
 #
