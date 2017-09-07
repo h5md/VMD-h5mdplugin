@@ -31,19 +31,18 @@ see also [arXiv:1308.6382](http://arxiv.org/abs/1308.6382).
 Installation
 ------------
 
-To compile the plugin, adapt the Makefile and run `make`. This should work on
-any Unix that has VMD and HDF5 installed. For example under Ubuntu you need the
-package *libhdf5-dev* and the VMD sources.
+To compile the plugin, run `make`. This should work on
+any Unix that has VMD and HDF5 installed. Under Ubuntu, the latter is
+provided by the package *libhdf5-dev*.
 
-Alternatively, you may build the plugin with CMake, which requires the
-environment variable `VMDDIR` to be set.
+Alternatively, you may build the plugin via CMake (`cmake && make`).
 
 To load the plugin in VMD add the following line to your `~/.vmdrc` (replace the
 directory to where you have compiled it):
 
         vmd_plugin_scandirectory /PATH_TO_SO_DIRECTORY/ h5mdplugin.so
 
-Alternatively you may also load the plugin by linking to h5mdplugin.so in the vmd molfile plugins folder (e.g. under .../vmd/plugins/LINUXAMD64/molfile/).
+Alternatively you may also load the plugin by linking h5mdplugin.so and libh5md.so into the vmd molfile plugins folder (e.g. under .../vmd/plugins/LINUXAMD64/molfile/). You can do this automatically via `make install`.
 
 Remarks
 -------
@@ -60,3 +59,4 @@ Examples
 --------
 Example h5md files can be found in the folder "samples".
 ![Example of the representation of a h5md file in VMD](https://lists.gnu.org/archive/html/h5md-user/2013-08/pngf5euRoAsmj.png)
+
