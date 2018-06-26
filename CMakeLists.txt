@@ -37,7 +37,8 @@ add_library(h5mdplugin SHARED
     h5mdplugin.c
 )
 target_link_libraries(h5md
-    ${HDF5_LIBRARIES}
+    ${HDF5_C_LIBRARIES}
+    ${HDF5_HL_LIBRARIES}
     # math library
     m
 )
@@ -50,7 +51,8 @@ set_target_properties(h5mdplugin PROPERTIES PREFIX "")
 
 target_link_libraries(h5mdplugin
     h5md
-    ${HDF5_LIBRARIES}
+    ${HDF5_C_LIBRARIES}
+    ${HDF5_HL_LIBRARIES}
 )
 
 install(TARGETS h5md h5mdplugin
