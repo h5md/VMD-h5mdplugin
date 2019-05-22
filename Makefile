@@ -20,7 +20,7 @@ all: h5mdtest libh5md.so h5mdplugin.so
 
 #nasty
 h5mdtest: h5mdtest.c h5mdplugin.so libh5md.so
-	$(CC) h5mdtest.c -o h5mdtest h5mdplugin.c $(CPPFLAGS) -std=c99 $(LDFLAGS) -Wl,-rpath,'\$$ORIGIN' $(HDF5LIBS) -lh5md
+	$(CC) h5mdtest.c -o h5mdtest h5mdplugin.c $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -Wl,-rpath,'\$$ORIGIN' $(HDF5LIBS) -lh5md
 
 
 libh5md.so: libh5md.o
